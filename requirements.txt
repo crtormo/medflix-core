@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+python-multipart
+streamlit
+chromadb
+groq
+pymupdf
+python-telegram-bot
+python-dotenv
+requests
+pydantic
+pydantic-settings
+citeproc-py-styles
+citeproc-py
+jinja2
