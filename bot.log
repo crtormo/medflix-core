@@ -1747,7 +1747,13 @@ Traceback (most recent call last):
 telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
 2025-12-23 14:32:49,386 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
 2025-12-23 14:32:59,600 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
-in do_action
+2025-12-23 14:33:09,816 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:33:13,273 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-23 14:33:13,274 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
+    await do_action()
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 127, in do_action
     action_cb_task.result()
     ~~~~~~~~~~~~~~~~~~~~~^^
   File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_updater.py", line 340, in polling_action_cb
@@ -1795,8 +1801,11 @@ in do_action
   File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/request/_baserequest.py", line 375, in _request_wrapper
     raise exception
 telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
-2025-12-23 14:32:42,452 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
-2025-12-23 14:32:42,454 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
+2025-12-23 14:33:24,538 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:33:34,781 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:33:45,019 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:33:48,398 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-23 14:33:48,400 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
 Traceback (most recent call last):
   File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
     await do_action()
@@ -1843,6 +1852,370 @@ Traceback (most recent call last):
     result = await self._request_wrapper(
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     ...<7 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/request/_baserequest.py", line 375, in _request_wrapper
+    raise exception
+telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-12-23 14:33:59,664 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:34:09,902 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:34:20,148 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:34:23,521 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-23 14:34:23,522 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
+    await do_action()
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 127, in do_action
+    action_cb_task.result()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_updater.py", line 340, in polling_action_cb
+    updates = await self.bot.get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_extbot.py", line 676, in get_updates
+    updates = await super().get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 4780, in get_updates
+    await self._post(
+    ^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    ),
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 703, in _post
+    return await self._do_post(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_extbot.py", line 372, in _do_post
+    return await super()._do_post(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 732, in _do_post
+    result = await request.post(
+             ^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/request/_baserequest.py", line 198, in post
+    result = await self._request_wrapper(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/request/_baserequest.py", line 375, in _request_wrapper
+    raise exception
+telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-12-23 14:34:34,785 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:34:45,026 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:34:55,368 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:34:58,646 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-23 14:34:58,647 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
+    await do_action()
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 127, in do_action
+    action_cb_task.result()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_updater.py", line 340, in polling_action_cb
+    updates = await self.bot.get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_extbot.py", line 676, in get_updates
+    updates = await super().get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 4780, in get_updates
+    await self._post(
+    ^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    ),
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 703, in _post
+    return await self._do_post(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_extbot.py", line 372, in _do_post
+    return await super()._do_post(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 732, in _do_post
+    result = await request.post(
+             ^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/request/_baserequest.py", line 198, in post
+    result = await self._request_wrapper(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/request/_baserequest.py", line 375, in _request_wrapper
+    raise exception
+telegram.error.Conflict: Conflict: terminated by other getUpdates request; make sure that only one bot instance is running
+2025-12-23 14:35:09,912 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:35:20,150 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:35:30,392 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:35:33,667 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-23 14:35:33,669 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
+    await do_action()
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 127, in do_action
+    action_cb_task.result()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_updater.py", line 340, in polling_action_cb
+    updates = await self.bot.get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_extbot.py", line 676, in get_updates
+    updates = await super().get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 4780, in get_updates
+    await self._post(
+    ^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    ),
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 703, in _post
+    return await self._do_post(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_extbot.py", line 372, in _do_post
+    return await super()._do_post(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 732, in _do_post
+    result = await request.post(
+             ^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/request/_baserequest.py", line 198, in post
+    result = await self._request_wrapper(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/request/_baserequest.py", line 375, in _reque2025-12-23 14:35:37,901 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.2025-12-23 14:35:44,892 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:35:55,171 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:36:05,411 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:36:08,692 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-23 14:36:08,693 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
+    await do_action()
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 127, in do_action
+    action_cb_task.result()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_updater.py", line 340, in polling_action_cb
+    updates = await self.bot.get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_extbot.py", line 676, in get_updates
+    updates = await super().get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 4780, in get_updates
+    await self._post(
+    ^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    ),
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 703, in _post
+    return await self._do_post(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_extbot.py", line 372, in _do_post
+    return await super()._do_post(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 732, in 2025-12-23 14:36:12,989 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-23 14:36:12,991 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
+    await do_action()
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 127, in do_action
+    action_cb_2025-12-23 14:36:19,933 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:36:30,193 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:36:40,419 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:36:43,682 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-23 14:36:43,684 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
+    await do_action()
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 127, in do_action
+    action_cb_task.result()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_updater.py", line 340, in polling_action_cb
+    updates = await self.bot.get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_extbot.py", line 676, in get_updates
+    updates = await super().get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 4780, in get_updates
+    await self._post(
+    ^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    ),
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/2025-12-23 14:36:47,904 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-23 14:36:47,906 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
+    await do_action()
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 127, in do_action
+    action_cb_task.result()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_updater.py", line 340, in polling_action_cb
+    updates = await self.bot.get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_extbot.py", line 676, in get_updates
+    updates = await super().get_updates(
+              ^^^^^^^^2025-12-23 14:36:54,973 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:37:05,200 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:37:15,453 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:37:18,735 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-23 14:37:18,737 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
+    await do_action()
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 127, in do_action
+    action_cb_task.result()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_updater.py", line 340, in polling_action_cb
+    updates = await self.bot.get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/crtormo/an2025-12-23 14:37:23,035 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-23 14:37:23,038 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
+    await do_action()
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 127, in do_action
+    action_cb_task.result()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_updater.py", line 340, in polling_action_cb
+    updates = await self.bot.get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_extbot.py", line 676, in get_updates
+    updates = await super().get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 4780, in get_updates
+    await self._post(
+    ^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    ),
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 703, in _post
+    return await self._do_post(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/a2025-12-23 14:37:29,959 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:37:40,235 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:37:50,454 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+2025-12-23 14:37:53,820 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-23 14:37:53,821 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
+    aw2025-12-23 14:37:58,046 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 409 Conflict"
+2025-12-23 14:37:58,047 - telegram.ext.Application - ERROR - No error handlers are registered, logging exception.
+Traceback (most recent call last):
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 134, in network_retry_loop
+    await do_action()
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_utils/networkloop.py", line 127, in do_action
+    action_cb_task.result()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_updater.py", line 340, in polling_action_cb
+    updates = await self.bot.get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_extbot.py", line 676, in get_updates
+    updates = await super().get_updates(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 4780, in get_updates
+    await self._post(
+    ^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    ),
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 703, in _post
+    return await self._do_post(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/ext/_extbot.py", line 372, in _do_post
+    return await super()._do_post(
+           ^^^^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/_bot.py", line 732, in _do_post
+    result = await request.post(
+             ^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.2025-12-23 14:38:05,043 - httpx - INFO - HTTP Request: POST https://api.telegram.org/bot8000770161:AAEDLdhXnSK1dxEwsZJEp6s9NOXAOKPegIA/getUpdates "HTTP/1.1 200 OK"
+lines>...
     )
     ^
   File "/home/crtormo/antigraviti/medflix-core/venv/lib/python3.13/site-packages/telegram/request/_baserequest.py", line 375, in _request_wrapper

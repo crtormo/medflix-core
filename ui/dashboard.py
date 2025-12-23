@@ -6,7 +6,7 @@ from pathlib import Path
 # Configuración
 st.set_page_config(page_title="MedFlix Core", layout="wide", page_icon="🧬")
 
-API_URL = "http://localhost:8000"
+API_URL = "http://localhost:8001"
 
 st.title("🧬 MedFlix Core: Auditoría Epistemológica")
 
