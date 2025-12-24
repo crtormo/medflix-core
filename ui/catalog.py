@@ -257,6 +257,21 @@ if st.session_state.current_view == "detail" and st.session_state.selected_paper
              st.rerun()
         c2.title(paper.get("titulo"))
         
+        # Technical Info Block
+        st.markdown("---")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("⭐ Calidad", f"{paper.get('score_calidad', 0)}/10")
+        
+        doi = paper.get("doi")
+        if doi:
+            m2.markdown(f"**DOI**\n\n[{doi}](https://doi.org/{doi})")
+        else:
+            m2.metric("DOI", "N/A")
+            
+        m3.markdown(f"**Muestra:** {paper.get('n_muestra', 'N/A')}\n\n**NNT:** {paper.get('nnt', 'N/A')}")
+        m4.markdown(f"**Especialidad:** {paper.get('especialidad')}\n\n**Tipo:** {paper.get('tipo_estudio')}")
+        st.markdown("---")
+
         # Tabs
         tab1, tab2, tab3 = st.tabs(["📄 Análisis & PDF", "💬 Chat con Paper", "✏️ Metadatos"])
         
