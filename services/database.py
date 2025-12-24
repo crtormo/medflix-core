@@ -255,12 +255,21 @@ class DatabaseService:
             if scores:
                 avg_score = sum(s[0] for s in scores) / len(scores)
             
+            # Breakdown por especialidad
+            from sqlalchemy import func
+            breakdown = session.query(Paper.especialidad, func.count(Paper.id))\
+                .filter(Paper.procesado == True)\
+                .group_by(Paper.especialidad)\
+                .all()
+            spec_stats = {b[0]: b[1] for b in breakdown if b[0]}
+
             return {
                 "total_papers": total,
                 "procesados": procesados,
                 "pendientes": total - procesados,
                 "con_graficos": con_graficos,
                 "especialidades": especialidades,
+                "especialidades_breakdown": spec_stats,
                 "score_promedio": round(avg_score, 2)
             }
     

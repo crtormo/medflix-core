@@ -269,7 +269,11 @@ if st.session_state.current_view == "detail" and st.session_state.selected_paper
             m2.metric("DOI", "N/A")
             
         m3.markdown(f"**Muestra:** {paper.get('n_muestra', 'N/A')}\n\n**NNT:** {paper.get('nnt', 'N/A')}")
-        m4.markdown(f"**Especialidad:** {paper.get('especialidad')}\n\n**Tipo:** {paper.get('tipo_estudio')}")
+        
+        # Revista y Fecha (Enriquecidos)
+        revista = paper.get('revista') or "N/A"
+        fecha = paper.get('fecha_publicacion_exacta') or paper.get('año')
+        m4.markdown(f"**Revista:** {revista}\n\n**Fecha:** {fecha}\n\n**Tipo:** {paper.get('tipo_estudio')}")
         st.markdown("---")
 
         # Tabs
@@ -339,6 +343,13 @@ if st.session_state.current_view == "detail" and st.session_state.selected_paper
 
 # 2. VIEW HOME (Swimlanes)
 elif st.session_state.current_view == "home":
+    # Cargar Stats
+    try:
+        stats = requests.get(f"{API_URL}/stats").json()
+        specs = stats.get("especialidades_breakdown", {})
+    except:
+        specs = {}
+
     # HERO
     st.markdown("## 🔥 Nuevos Lanzamientos")
     
@@ -368,7 +379,8 @@ elif st.session_state.current_view == "home":
     st.divider()
     
     # Swimlane 3: Por Especialidad (Ej: UCI)
-    st.markdown("## 🏥 Cuidados Críticos (UCI)")
+    uci_count = specs.get('UCI', 0)
+    st.markdown(f"## 🏥 Cuidados Críticos (UCI) <span style='font-size: 0.8em; color: gray;'>({uci_count} papers)</span>", unsafe_allow_html=True)
     cols3 = st.columns(5)
     uci = fetch_papers(limit=5, specialty="UCI") # Backend debe soportar 'UCI' si es string parcial
     for i, p in enumerate(uci):
@@ -435,10 +447,46 @@ elif st.session_state.current_view == "channels":
     st.markdown("### Canales Monitoreados")
     
     # Trigger Escaneo Manual
-    if st.button("🔄 Escanear Todos Ahora"):
+    if st.button("🔄 Escanear Todos Ahora", key="scan_btn"):
         try:
             requests.post(f"{API_URL}/scan-channels")
-            st.toast("Escaneo iniciado en segundo plano...")
+            st.toast("Escaneo iniciado...")
+            
+            # Polling de progreso
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            log_container = st.empty()
+            
+            active = True
+            while active:
+                time.sleep(1)
+                try:
+                    status = requests.get(f"{API_URL}/scan-status").json()
+                    active = status["active"]
+                    
+                    # Calcular porcentaje
+                    total = status["stats"]["total_canales"] or 1
+                    current = status["stats"]["canal_actual"]
+                    prog = min(current / total, 1.0)
+                    progress_bar.progress(prog)
+                    
+                    status_text.info(f"{status['message']}")
+                    
+                    # Mostrar últimos logs
+                    logs_md = "\n".join([f"- {l}" for l in status["last_log"][-5:]])
+                    log_container.code(logs_md)
+                    
+                    if not active:
+                         stats = status["stats"]
+                         if stats["nuevos_descargados"] > 0:
+                             st.success(f"✅ Finalizado! Nuevos papers: {stats['nuevos_descargados']}.")
+                         else:
+                             st.warning("🏁 Finalizado. No se encontraron nuevos papers en los canales monitoreados.")
+                             
+                except Exception as e:
+                     st.error(f"Error obteniendo estado: {e}")
+                     break
+                     
         except:
             st.error("No se pudo iniciar el escaneo")
 

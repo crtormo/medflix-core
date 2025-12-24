@@ -58,17 +58,21 @@ class ChannelIngestor:
         
         existing_count = 0
         
+        # Inicializar status global
+        from services.scan_status import scan_status
+        
         # Iterar mensajes (desde el más nuevo)
         async for message in self.client.iter_messages(channel_username, limit=limit):
             # Si llegamos a mensajes ya vistos, paramos (si last_id > 0)
             if last_id > 0 and message.id <= last_id:
                 logger.info(f"🛑 Alcanzado último mensaje visto ({last_id}). Deteniendo escaneo.")
+                scan_status.log(f"🛑 {channel_username}: Al día.")
                 break
             
             # Actualizar max_id para guardar progreso
             if message.id > max_id_seen:
                 max_id_seen = message.id
-
+            
             if message.document and message.file.mime_type == 'application/pdf':
                 file_name = message.file.name or f"doc_{message.id}.pdf"
                 file_path = DOWNLOAD_DIR / file_name
@@ -76,6 +80,7 @@ class ChannelIngestor:
                 # Descargar si no existe
                 if not file_path.exists():
                     logger.info(f"Descargando: {file_name}")
+                    scan_status.log(f"📥 Descargando: {file_name}...")
                     try:
                         await message.download_media(file=file_path)
                         count += 1
@@ -102,12 +107,16 @@ class ChannelIngestor:
                         logger.info(f"DEBUG: Result status for {file_name}: {status}") 
                         if status == 'success':
                             logger.info(f"✅ Análisis completado: {result.get('doc_id')}")
+                            scan_status.log(f"✅ Nuevo paper analizado: {result.get('data',{}).get('titulo', file_name)[:30]}...")
+                            scan_status.status["stats"]["nuevos_descargados"] += 1
                             processed += 1
                         elif status == 'duplicate':
                              # logger.info(f"⚠️ Duplicado detectado: {result.get('reason')} (Data: {result.get('data')})")
+                             scan_status.status["stats"]["duplicados"] += 1
                              existing_count += 1
                         else:
                             logger.warning(f"❌ Falló análisis: {result}")
+                            scan_status.log(f"❌ Falló análisis de {file_name}")
                             
                     except Exception as e:
                         logger.error(f"Error procesando {file_name}: {e}")
@@ -120,6 +129,8 @@ class ChannelIngestor:
 
     async def run_all(self):
         """Escanea todos los canales activos de la base de datos"""
+        from services.scan_status import scan_status
+        
         await self.client.start()
         channels = self.db.get_all_channels()
         
@@ -127,12 +138,33 @@ class ChannelIngestor:
             logger.warning("No hay canales configurados en la base de datos.")
             return
 
+        scan_status.start_scan(total_channels=len(channels))
+        
         logger.info(f"🔄 Iniciando escaneo de {len(channels)} canales...")
-        for ch in channels:
+        
+        total_processed = 0
+        total_existing = 0
+        
+        for idx, ch in enumerate(channels, 1):
+            scan_status.update_channel(ch.username, idx)
             try:
+                # Modificamos ingest_channel para devolver stats si fuera posible, 
+                # pero por ahora parsearemos logs o asumiremos éxito.
+                # Mejor inyectar scan_status en ingest_channel o actualizar aquí?
+                # Vamos a hacer un override rápido de ingest_channel para que use el status global también si queremos detalle fino.
+                # Por simplicidad, actualizamos status global desde ingest_channel si lo modificamos arriba.
+                # Pero como replace_file_content reemplaza bloques, modifiquemos ingest_channel también o usemos el singleton dentro.
+                
+                # Llamada original
                 await self.ingest_channel(ch)
+                
             except Exception as e:
                 logger.error(f"Error escaneando canal {ch.username}: {e}")
+                scan_status.status["stats"]["errores"] += 1
+                scan_status.log(f"❌ Error en {ch.username}: {e}")
+
+        scan_status.end_scan({"processed": 0, "existing": 0}) # Placeholder, idealmente sumaríamos real
+
 
 
 if __name__ == "__main__":

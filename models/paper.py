@@ -39,6 +39,10 @@ class Paper(Base):
     nnt = Column(String(50))  # Número Necesario a Tratar
     poblacion = Column(String(200))  # Descripción de la población
     
+    # Metadatos Enriquecidos (Fase 7)
+    impact_factor = Column(String(50)) # Estimado o Manual
+    fecha_publicacion_exacta = Column(String(20)) # "2023-05-12"
+    
     # Análisis IA
     resumen_slide = Column(Text)  # Frase para diapositiva
     analisis_completo = Column(Text)  # Auditoría epistemológica completa
@@ -79,6 +83,8 @@ class Paper(Base):
             "n_muestra": self.n_muestra,
             "nnt": self.nnt,
             "poblacion": self.poblacion,
+            "impact_factor": self.impact_factor,
+            "fecha_publicacion_exacta": self.fecha_publicacion_exacta,
             "resumen_slide": self.resumen_slide,
             "analisis_completo": self.analisis_completo,
             "score_calidad": self.score_calidad,

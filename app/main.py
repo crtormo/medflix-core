@@ -218,7 +218,14 @@ async def trigger_scan(background_tasks: BackgroundTasks):
             print(f"Error en escaneo manual: {e}")
             
     background_tasks.add_task(run_scan)
+    background_tasks.add_task(run_scan)
     return {"status": "started", "message": "Escaneo de canales iniciado en segundo plano"}
+
+@app.get("/scan-status")
+def get_scan_status():
+    """Retorna el estado actual del escaneo de canales."""
+    from services.scan_status import scan_status
+    return scan_status.status
 
 @app.get("/citar/{doc_id}")
 def generate_citation(doc_id: str, style: str = "vancouver"):

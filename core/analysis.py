@@ -75,6 +75,25 @@ class AnalysisCore:
             # Snippets enriquecidos (JSON estructurado)
             snippets = self.groq.generate_snippets(doc_data['content'])
             
+            # ENRIQUECIMIENTO CON DOI (Nuevo Fase 7)
+            doi = doc_data.get('doi')
+            enriched_meta = {}
+            if doi:
+                try:
+                    from services.metadata_enricher import MetadataService
+                    md_service = MetadataService()
+                    enriched_meta = md_service.get_metadata_by_doi(doi)
+                    logger.info(f"✅ Metadatos enriquecidos para DOI {doi}")
+                except Exception as e:
+                    logger.warning(f"Error enriqueciendo metadatos DOI: {e}")
+
+            # Merge de datos (priorizar enriquecidos > snippets > doc_data)
+            final_ano = enriched_meta.get('año') or snippets.get('year')
+            final_titulo = enriched_meta.get('titulo') or doc_data['title']
+            
+            # Actualizar campos clave del paper base si mejoraron
+            # Nota: Esto debería hacerse idealmente antes, pero lo hacemos en el update
+            
             # 5. Análisis Visual de Gráficos
             if analyze_graphs:
                 try:
@@ -87,6 +106,7 @@ class AnalysisCore:
                     logger.error(f"Error en análisis visual: {e}")
         
         # 6. Actualizar DB con resultados completos
+        # Preparar datos de update incluyendo enriquecidos
         paper_updated = self.db_service.mark_as_processed(
             str(paper.id),
             analysis_data={
@@ -99,12 +119,20 @@ class AnalysisCore:
                 "nnt": snippets.get('nnt'),
                 "num_graficos": len(graphs_analysis),
                 "analisis_graficos": graphs_analysis,
-                # Campos adicionales que podríamos mapear del JSON
+                # Campos adicionales
                 "tags": snippets.get('tags'),
                 "poblacion": snippets.get('population'),
-                "año": snippets.get('year')
+                "año": final_ano,
+                # Campos Nuevos Enriquecidos
+                "revista": enriched_meta.get('revista'),
+                "fecha_publicacion_exacta": enriched_meta.get('fecha_publicacion'),
+                # "impact_factor": "N/A" # Pendiente: no lo da CrossRef directo
             }
         )
+        
+        # Si el título mejoró con DOI, actualizarlo también
+        if enriched_meta.get('titulo'):
+             self.db_service.update_paper(str(paper.id), titulo=enriched_meta.get('titulo'))
         
         # 7. Guardar en ChromaDB (para búsqueda semántica)
         # Usamos el análisis y metadatos clave para el embedding
