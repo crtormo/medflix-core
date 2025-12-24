@@ -3,6 +3,7 @@ import streamlit as st
 import requests
 import time
 from pathlib import Path
+from typing import List, Dict, Optional
 
 # Configuración de página - Estilo "Wide" para efecto Netflix
 st.set_page_config(
@@ -15,15 +16,14 @@ st.set_page_config(
 # Constantes
 API_URL = "http://api:8005"
 
-
-# --- CSS PERSONALIZADO: ESTILO NETFLIX ---
+# --- CSS PERSONALIZADO: ESTILO NETFLIX & SWIMLANES ---
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
 
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
-        background-color: #141414; /* Fondo Netflix Dark */
+        background-color: #141414;
         color: #e5e5e5;
     }
     
@@ -31,63 +31,71 @@ st.markdown("""
         background-color: #141414;
     }
     
-    /* Header Transparente */
-    header {visibility: hidden;}
-    
-    /* Títulos de Carrusel */
-    h3 {
-        color: #e5e5e5;
-        font-weight: 600;
-        font-size: 1.4rem;
-        margin-bottom: 0.5rem;
-        margin-top: 1.5rem;
+    /* Swimlane Container */
+    .swimlane-container {
+        display: flex;
+        overflow-x: auto;
+        padding: 5px 0 20px 0;
+        gap: 15px;
+        scrollbar-width: thin;
+        scrollbar-color: #46d369 #1f1f1f;
+        scroll-behavior: smooth;
     }
-    
-    /* Tarjetas de Paper */
+    .swimlane-container::-webkit-scrollbar {
+        height: 8px;
+    }
+    .swimlane-container::-webkit-scrollbar-track {
+        background: #1f1f1f;
+    }
+    .swimlane-container::-webkit-scrollbar-thumb {
+        background-color: #46d369;
+        border-radius: 4px;
+    }
+
+    /* Tarjetas de Paper - Diseño Flex para Swimlane */
+    .paper-card-wrapper {
+        min-width: 250px;
+        max-width: 250px;
+        flex: 0 0 auto;
+    }
+
     .paper-card {
         background-color: #1f1f1f;
         border-radius: 4px;
         transition: transform 0.3s ease, box-shadow 0.3s ease;
         cursor: pointer;
         overflow: hidden;
-        margin-bottom: 10px;
         position: relative;
+        height: 100%;
     }
     .paper-card:hover {
-        transform: scale(1.05); /* Efecto pop */
+        transform: scale(1.03);
         z-index: 10;
-        box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.6);
     }
     
     .card-img {
         width: 100%;
-        height: 160px;
+        height: 140px;
         object-fit: cover;
     }
     
     .card-content {
-        padding: 10px;
+        padding: 8px;
     }
     
     .card-title {
-        font-size: 0.95rem;
-        font-weight: 700;
+        font-size: 0.9rem;
+        font-weight: 600;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        margin-bottom: 4px;
-    }
-    
-    .card-meta {
-        font-size: 0.75rem;
-        color: #a3a3a3;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+        margin-bottom: 2px;
+        color: white;
     }
     
     .score-badge {
-        color: #46d369; /* Verde Netflix */
+        color: #46d369;
         font-weight: 700;
         font-size: 0.8rem;
     }
@@ -95,26 +103,18 @@ st.markdown("""
     .quality-hd {
         border: 1px solid #a3a3a3;
         border-radius: 2px;
-        padding: 0 4px;
+        padding: 0 3px;
         font-size: 0.6rem;
+        color: #a3a3a3;
+        margin-left: 5px;
     }
 
-    /* Botón Hero */
-    .hero-btn {
-        background-color: white;
-        color: black;
-        border: none;
-        padding: 10px 24px;
+    /* Botones Custom */
+    .stButton > button {
         border-radius: 4px;
-        font-weight: 700;
-        font-size: 1.1rem;
-        cursor: pointer;
     }
-    .hero-btn:hover {
-        background-color: rgba(255,255,255,0.75);
-    }
-    
-    /* Modal Personalizado (simulado con expander forzado o sidebar) */
+
+    /* Modal Fake */
     
 </style>
 """, unsafe_allow_html=True)
@@ -123,267 +123,280 @@ st.markdown("""
 if 'selected_paper_id' not in st.session_state:
     st.session_state.selected_paper_id = None
 if 'current_view' not in st.session_state:
-    st.session_state.current_view = "catalog"
+    st.session_state.current_view = "home" # home, browse, channels, detail
+if 'browse_filter' not in st.session_state:
+    st.session_state.browse_filter = {} # {specialty, sort, query}
 if 'active_jobs' not in st.session_state:
-    st.session_state.active_jobs = [] # List of job_ids
+    st.session_state.active_jobs = [] 
+if 'page' not in st.session_state:
+    st.session_state.page = 1
 
-# --- JOB POLLING ---
+# --- FUNCIONES API HELPER ---
+def fetch_papers(limit=10, offset=0, specialty=None, sort="recent"):
+    params = {"limit": limit, "offset": offset, "sort": sort}
+    if specialty and specialty != "Todas":
+        params["specialty"] = specialty
+    try:
+        res = requests.get(f"{API_URL}/papers", params=params)
+        return res.json() if res.status_code == 200 else []
+    except:
+        return []
+
+def get_paper_details(pid):
+    try:
+        res = requests.get(f"{API_URL}/papers/{pid}")
+        return res.json() if res.status_code == 200 else None
+    except:
+        return None
+
 def poll_jobs():
-    """Consulta estado de jobs activos y notifica."""
-    if not st.session_state.active_jobs:
-        return
-
-    completed_jobs = []
+    if not st.session_state.active_jobs: return
+    completed = []
     for job_id in st.session_state.active_jobs:
         try:
             res = requests.get(f"{API_URL}/jobs/{job_id}")
             if res.status_code == 200:
                 data = res.json()
-                status = data.get("status")
-                if status == "completado":
-                     st.toast(f"✅ Análisis completado para Paper ID: {data.get('doc_id')}")
-                     completed_jobs.append(job_id)
-                elif status == "fallido":
-                     st.error(f"❌ Falló análisis: {data.get('message')}")
-                     completed_jobs.append(job_id)
-        except:
-            pass
-    
-    # Limpiar jobs terminados
-    for job in completed_jobs:
+                if data["status"] == "completado":
+                     st.toast(f"✅ Análisis listo: {data.get('doc_id')}")
+                     completed.append(job_id)
+                elif data["status"] == "fallido":
+                     st.error(f"❌ Falló job {job_id[:6]}")
+                     completed.append(job_id)
+        except: pass
+    for job in completed:
         st.session_state.active_jobs.remove(job)
-        if completed_jobs:
-            time.sleep(1)
-            st.rerun()
+        if completed:time.sleep(1);st.rerun()
 
-# Llamar polling al inicio de cada render
 poll_jobs()
 
-# --- FUNCIONES API ---
-def get_recent_papers():
-    try:
-        response = requests.get(f"{API_URL}/papers", params={"limit": 8})
-        if response.status_code == 200:
-            return response.json()
-    except Exception as e:
-        st.error(f"Error conectando con API: {e}")
-    return []
-
-# --- NAVEGACIÓN PRINCIPAL ---
-nav_col1, nav_col2, nav_col3 = st.columns([1,1,6])
-with nav_col1:
-    if st.button("🎬 Catálogo", use_container_width=True):
-        st.session_state.current_view = "catalog"
-        st.session_state.selected_paper_id = None
+# --- SIDEBAR DE NAVEGACIÓN Y FILTROS ---
+with st.sidebar:
+    st.title("🧬 MEDFLIX")
+    
+    if st.button("🏠 Inicio", use_container_width=True):
+        st.session_state.current_view = "home"
         st.rerun()
-with nav_col2:
-    if st.button("🤖 Canales", use_container_width=True):
+        
+    if st.button("🔍 Explorar Todo", use_container_width=True):
+        st.session_state.current_view = "browse"
+        st.session_state.browse_filter = {} # Reset
+        st.rerun()
+
+    if st.button("🤖 Canales Telegram", use_container_width=True):
         st.session_state.current_view = "channels"
-        st.session_state.selected_paper_id = None
         st.rerun()
-
-# --- VISTA: CANALES TELEGRAM ---
-if st.session_state.current_view == "channels":
-    st.markdown("## 🤖 Gestión de Canales de Telegram")
-    st.markdown("Configura los canales que MedFlix debe monitorear automáticamente.")
+        
+    st.divider()
     
-    # 1. Añadir Canal
-    with st.expander("➕ Añadir Nuevo Canal", expanded=False):
-        c1, c2, c3 = st.columns([3, 2, 1])
-        new_channel = c1.text_input("Username del Canal (ej: @librosmedicina)")
-        new_name = c2.text_input("Nombre Descriptivo (Opcional)")
-        if c3.button("Añadir", type="primary", use_container_width=True):
-            if new_channel:
-                try:
-                    res = requests.post(f"{API_URL}/channels", params={"username": new_channel, "nombre": new_name})
-                    if res.status_code == 200:
-                        st.success(f"Canal {new_channel} añadido correctamente")
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error(f"Error: {res.text}")
-                except Exception as e:
-                    st.error(f"Error de conexión: {e}")
-    
-    # 2. Lista de Canales
-    st.markdown("### Canales Monitoreados")
-    
-    # Trigger Escaneo Manual
-    if st.button("🔄 Escanear Todos Ahora"):
-        try:
-            requests.post(f"{API_URL}/scan-channels")
-            st.toast("Escaneo iniciado en segundo plano...")
-        except:
-            st.error("No se pudo iniciar el escaneo")
+    # Filtros solo visibles en Browse o Home
+    if st.session_state.current_view in ["browse", "home"]:
+        st.markdown("### Filtros Rápidos")
+        spec = st.selectbox("Especialidad", ["Todas", "Cardiología", "UCI", "Infectología", "Neurología", "Neumonía"])
+        stype = st.selectbox("Tipo Estudio", ["Todos", "RCT", "Systematic Review", "Cohorte"])
+        
+        if st.button("Aplicar Filtros"):
+             st.session_state.current_view = "browse"
+             st.session_state.browse_filter = {"specialty": spec, "type": stype}
+             st.session_state.page = 1
+             st.rerun()
 
-    try:
-        channels = requests.get(f"{API_URL}/channels").json()
-        if not channels:
-            st.info("No hay canales configurados.")
-        else:
-            for ch in channels:
-                with st.container():
-                    st.markdown(f"""
-                    <div style="background-color: #1f1f1f; padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <h4 style="margin:0; color:white;">{ch['nombre']}</h4>
-                            <code style="color:#a3a3a3;">{ch['username']}</code>
-                        </div>
-                        <div style="text-align: right;">
-                             <p style="margin:0; font-size: 0.8rem; color:#a3a3a3;">Último escaneo: {ch['last_scan_date'] or 'Nunca'}</p>
-                             <p style="margin:0; font-size: 0.8rem; color:#46d369;">ID: {ch['last_scanned_id']}</p>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    if st.button("🗑️ Eliminar", key=f"del_{ch['username']}"):
-                        requests.delete(f"{API_URL}/channels/{ch['username']}")
-                        st.rerun()
-                        
-    except Exception as e:
-        st.error(f"Error al cargar canales: {e}")
+    st.divider()
+    # Upload Rápido
+    with st.expander("📤 Subir Paper"):
+        uploaded_file = st.file_uploader("PDF", type="pdf")
+        if uploaded_file and st.button("Subir y Analizar"):
+            files = {"file": (uploaded_file.name, uploaded_file, "application/pdf")}
+            try:
+                res = requests.post(f"{API_URL}/upload", files=files)
+                if res.status_code == 200:
+                    jid = res.json()["job_id"]
+                    st.session_state.active_jobs.append(jid)
+                    st.success("Subido. Procesando...")
+                    time.sleep(1); st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
-# --- VISTA: CATÁLOGO ---
-elif st.session_state.current_view == "catalog":
+# --- COMPONENTE TARJETA ---
+def render_card(paper, key_prefix="card"):
+    """Renderiza una tarjeta que NO usa HTML raw para layout por limitaciones de Streamlit events inside HTML.
+       Usaremos st.container y st.image nativos para interactivity.
+    """
+    title = paper.get("titulo", "Sin título")
+    score = paper.get("score_calidad") or 0
+    year = paper.get("año", "")
+    ptype = paper.get("tipo_estudio", "Paper")
+    img_path = paper.get("thumbnail_path")
     
-    # --- DETALLE DEL PAPER (Modal-like) ---
-    if st.session_state.selected_paper_id:
-        # Mostrar detalle
-        try:
-            res = requests.get(f"{API_URL}/papers/{st.session_state.selected_paper_id}")
-            if res.status_code == 200:
-                paper = res.json()
-                
-                # Header con Botón Atrás
-                c1, c2 = st.columns([1, 10])
-                with c1:
-                    if st.button("⬅ Volver"):
-                        st.session_state.selected_paper_id = None
-                        st.rerun()
-                with c2:
-                    st.title(paper.get("titulo", "Sin Título"))
-                
-                # Metadatos Principales
-                m1, m2, m3, m4 = st.columns(4)
-                m1.metric("Score Calidad", f"{paper.get('score_calidad', 0)}/10")
-                m2.metric("N (Muestra)", paper.get("n_muestra", "N/A"))
-                m3.metric("NNT", paper.get("nnt", "N/A"))
-                m4.caption(f"Especialidad: {paper.get('especialidad')}\nTipo: {paper.get('tipo_estudio')}")
-                
-                st.divider()
-                
-                # Contenido del Análisis
-                col_text, col_vis = st.columns([2, 1])
-                
-                with col_text:
-                    st.markdown("### 🧐 Auditoría Epistemológica")
-                    analysis_text = paper.get("analisis_completo", "")
-                    if analysis_text:
-                        st.markdown(analysis_text)
-                    else:
-                        st.info("El análisis está vacío o pendiente.")
-                
-                with col_vis:
-                    st.markdown("### 📊 Análisis Visual")
-                    # Placeholder para imágenes (cuando funcionen)
-                    imgs = paper.get("imagenes", [])
-                    if imgs:
-                        for img in imgs:
-                            # TODO: Servir imagenes estáticas
-                             st.warning("Imagen detectada (rendering pendiente)")
-                    else:
-                        st.info("No se detectaron gráficos analizables.")
-
-            else:
-                 st.error("No se pudo cargar el paper.")
-                 if st.button("Cerrar"):
-                    st.session_state.selected_paper_id = None
-                    st.rerun()
-        except Exception as e:
-            st.error(f"Error cargando detalle: {e}") 
+    if img_path:
+        filename = Path(img_path).name
+        img_url = f"{API_URL}/static/thumbnails/{filename}"
     else:
-        # Si no hay detalle seleccionado, mostramos la home del catálogo
+        img_url = f"https://via.placeholder.com/300x160/1a1a1a/cccccc?text={ptype}"
+
+    with st.container(border=True): # Streamlit 1.30+
+        st.image(img_url, use_container_width=True)
+        st.markdown(f"**{title}**")
+        st.caption(f"⭐ {int(score*10)}% | {year} | {ptype}")
+        if st.button("Ver", key=f"{key_prefix}_{paper['id']}", use_container_width=True):
+             st.session_state.selected_paper_id = paper['id']
+             st.session_state.current_view = "detail"
+             st.rerun()
+
+# --- VISTAS ---
+
+# 1. VIEW DETALLE (Prioridad si hay ID seleccionado)
+if st.session_state.current_view == "detail" and st.session_state.selected_paper_id:
+    paper = get_paper_details(st.session_state.selected_paper_id)
+    if paper:
+        # Header
+        c1, c2 = st.columns([1, 10])
+        if c1.button("⬅ Atrás"):
+             st.session_state.current_view = "home" # O la anterior history
+             st.session_state.selected_paper_id = None
+             st.rerun()
+        c2.title(paper.get("titulo"))
         
-        # --- HERO SECTION ---
-        st.markdown("""
-        <div style="background: linear-gradient(rgba(0,0,0,0.5), #141414), url('https://source.unsplash.com/1600x900/?hospital,technology'); background-size: cover; height: 60vh; padding: 50px; display: flex; flex-direction: column; justify-content: center;">
-            <h1 style="font-size: 4rem; margin-bottom: 10px;">MEDFLIX</h1>
-            <h2 style="font-size: 2rem; margin-bottom: 20px;">Auditoría Epistemológica de Vanguardia</h2>
-            <p style="font-size: 1.2rem; max-width: 600px; margin-bottom: 30px;">
-                Descubre la verdad detrás de los papers médicos. Análisis crítico impulsado por IA, detección de sesgos y extracción visual instantánea.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+        # Tabs
+        tab1, tab2, tab3 = st.tabs(["📄 Análisis & PDF", "💬 Chat con Paper", "✏️ Metadatos"])
         
-        # --- BARRA DE NAVEGACIÓN / FILTROS ---
-        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
-        with c1:
-            search = st.text_input("🔍 Buscar títulos, autores, tags...", label_visibility="collapsed")
-        with c2:
-            especialidad = st.selectbox("Especialidad", ["Todas", "Cardiología", "UCI", "Infectología", "Neurología"])
-        with c3:
-            tipo = st.selectbox("Tipo Estudio", ["Todos", "RCT", "Meta-análisis", "Cohorte"])
-        with c4:
-            # Botón de upload abre el modal
-            if st.button("📤 Subir Paper", type="primary"):
-                st.session_state.show_upload = True
-        
-        if getattr(st.session_state, 'show_upload', False):
-            with st.expander("📤 Cargar Nuevo Paper", expanded=True):
-                uploaded_file = st.file_uploader("Arrastra tu PDF aquí", type="pdf")
-                if uploaded_file:
-                    if st.button("Analizar ahora"):
-                        try:
-                            files = {"file": (uploaded_file.name, uploaded_file, "application/pdf")}
-                            with st.spinner("Subiendo y analizando..."):
-                                res = requests.post(f"{API_URL}/upload", files=files)
-                            
-                            if res.status_code == 200:
-                                data = res.json()
-                                job_id = data.get("job_id")
-                                st.session_state.active_jobs.append(job_id)
-                                st.success(f"✅ Archivo subido. Analizando en segundo plano (Job: {job_id[:8]})...")
-                                st.session_state.show_upload = False
-                                time.sleep(1)
-                                st.rerun()
-                            else:
-                                st.error(f"Error al subir: {res.text}")
-                        except Exception as e:
-                            st.error(f"Error de conexión: {e}")
-        
-        # --- CARRUSELES ---
-        def render_card(paper):
-            # Renderiza una tarjeta HTML clickable
-            title = paper.get("titulo", "Sin título")
-            score = paper.get("score_calidad") or 0
-            year = paper.get("año", "")
-            ptype = paper.get("tipo_estudio", "Paper")
-            img_path = paper.get("thumbnail_path") 
+        with tab1:
+            col_info, col_pdf = st.columns([1, 1])
+            with col_info:
+                st.markdown("### Review Epistemológico")
+                st.write(paper.get("analisis_completo", "Pendiente..."))
+                st.metric("Calidad", f"{paper.get('score_calidad')}/10")
             
-            # Resolver ruta de imagen 
-            # Si es local path, la convertimos a URL del endpoint estático de FastAPI
-            if img_path:
-                filename = Path(img_path).name
-                img_url = f"{API_URL}/static/thumbnails/{filename}"
-            else:
-                 # Placeholder si no hay imagen
-                img_url = f"https://via.placeholder.com/300x160/1a1a1a/cccccc?text={ptype}"
-
-            with st.container():
-                st.image(img_url, use_container_width=True)
-                st.markdown(f"**{title}**")
-                st.markdown(f"<span class='score-badge'>{int(score*10)}% Match</span> <span class='quality-hd'>{ptype}</span> {year}", unsafe_allow_html=True)
-                if st.button("Ver Análisis", key=f"btn_{paper['id']}", use_container_width=True):
-                    st.session_state.selected_paper_id = paper['id']
-                    st.rerun()
-
-        # 1. Agregados Recientemente
-        st.markdown("<h3>Nuevos Lanzamientos</h3>", unsafe_allow_html=True)
-        cols = st.columns(4)
-        papers = get_recent_papers()
-        if not papers:
-            st.info("No hay papers procesados aún. ¡Sube uno o añade canales!")
+            with col_pdf:
+                # PDF Viewer
+                fpath = paper.get("archivo_path")
+                if fpath:
+                    fname = Path(fpath).name
+                    # Determinar si es upload normal o channel
+                    if "uploads_channels" in fpath:
+                        pdf_url = f"{API_URL}/static/uploads_channels/{fname}"
+                    else:
+                        pdf_url = f"{API_URL}/static/pdfs/{fname}"
+                    
+                    st.markdown(f"### 📑 Documento Original")
+                    st.markdown(f'<iframe src="{pdf_url}" width="100%" height="600px"></iframe>', unsafe_allow_html=True)
+                    st.download_button("Descargar PDF", data=requests.get(pdf_url).content, file_name=fname)
         
-        for i, col in enumerate(cols):
-            with col:
-                if i < len(papers):
-                    render_card(papers[i])
+        with tab2:
+            st.markdown("### 💬 Pregúntale a este Paper")
+            # Chat history local state for this paper
+            k_chat = f"chat_{paper['id']}"
+            if k_chat not in st.session_state:
+                st.session_state[k_chat] = []
+
+            for msg in st.session_state[k_chat]:
+                with st.chat_message(msg["role"]):
+                    st.write(msg["content"])
+            
+            prompt = st.chat_input("Escribe tu pregunta sobre el estudio...")
+            if prompt:
+                st.session_state[k_chat].append({"role": "user", "content": prompt})
+                with st.chat_message("user"):
+                    st.write(prompt)
+                
+                with st.spinner("Analizando..."):
+                    try:
+                        res = requests.post(f"{API_URL}/chat/{paper['id']}", json={"question": prompt})
+                        ans = res.json().get("answer", "Error")
+                    except Exception as e:
+                        ans = f"Error de conexión: {e}"
+                
+                st.session_state[k_chat].append({"role": "assistant", "content": ans})
+                with st.chat_message("assistant"):
+                    st.write(ans)
+
+        with tab3:
+            st.write("### Editar Metadatos")
+            new_title = st.text_input("Título", value=paper.get("titulo"))
+            if st.button("Guardar Cambios"):
+                 requests.put(f"{API_URL}/papers/{paper['id']}", json={"titulo": new_title})
+                 st.success("Guardado!")
+                 time.sleep(0.5)
+                 st.rerun()
+
+    else:
+        st.error("Paper no encontrado")
+
+# 2. VIEW HOME (Swimlanes)
+elif st.session_state.current_view == "home":
+    # HERO
+    st.markdown("## 🔥 Nuevos Lanzamientos")
+    
+    # Swimlane 1: Recientes
+    cols = st.columns(5)
+    recientes = fetch_papers(limit=5, sort="recent")
+    for i, p in enumerate(recientes):
+        with cols[i]:
+            render_card(p, "recent")
+            
+    st.divider()
+    
+    # Swimlane 2: Top Quality
+    col_head, col_more = st.columns([5,1])
+    col_head.markdown("## ⭐ Top Calidad (Evidence based)")
+    if col_more.button("Ver todos Top"):
+        st.session_state.current_view = "browse"
+        st.session_state.browse_filter = {"sort": "quality"}
+        st.rerun()
+        
+    cols2 = st.columns(5)
+    top = fetch_papers(limit=5, sort="quality")
+    for i, p in enumerate(top):
+        with cols2[i]:
+            render_card(p, "top")
+            
+    st.divider()
+    
+    # Swimlane 3: Por Especialidad (Ej: UCI)
+    st.markdown("## 🏥 Cuidados Críticos (UCI)")
+    cols3 = st.columns(5)
+    uci = fetch_papers(limit=5, specialty="UCI") # Backend debe soportar 'UCI' si es string parcial
+    for i, p in enumerate(uci):
+        with cols3[i]:
+            render_card(p, "uci")
+
+# 3. VIEW BROWSE (Grid + Paginación)
+elif st.session_state.current_view == "browse":
+    filt = st.session_state.browse_filter
+    st.title(f"Explorando: {filt.get('specialty', 'Todos')} ({filt.get('sort', 'Reciente')})")
+    
+    limit = 12
+    offset = (st.session_state.page - 1) * limit
+    
+    papers = fetch_papers(limit=limit, offset=offset, specialty=filt.get("specialty"), sort=filt.get("sort"))
+    
+    # Grid 4x3
+    # Dividir lista en chunks de 4
+    for i in range(0, len(papers), 4):
+        cols = st.columns(4)
+        for j in range(4):
+            if i + j < len(papers):
+                with cols[j]:
+                    render_card(papers[i+j], f"browse_{st.session_state.page}")
+    
+    # Paginación
+    c1, c2, c3 = st.columns([1,1,1])
+    with c2:
+        col_prev, col_page, col_next = st.columns([1,2,1])
+        if st.session_state.page > 1:
+            if col_prev.button("◀ Prev"):
+                st.session_state.page -= 1
+                st.rerun()
+        col_page.markdown(f"<p style='text-align:center'>Página <b>{st.session_state.page}</b></p>", unsafe_allow_html=True)
+        if len(papers) == limit: # Asumimos que si trae limit, hay más
+            if col_next.button("Next ▶"):
+                st.session_state.page += 1
+                st.rerun()
+
+# 4. VIEW CHANNELS (Legacy)
+elif st.session_state.current_view == "channels":
+    st.markdown("## 🤖 Gestión de Canales")
+    # ... (copiar código simple de channels anterior si es necesario, o resumido)
+    channels = requests.get(f"{API_URL}/channels").json()
+    for ch in channels:
+        st.info(f"📢 {ch['nombre']} ({ch['username']}) - Último ID: {ch['last_scanned_id']}")

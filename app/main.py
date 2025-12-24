@@ -243,3 +243,45 @@ def generate_citation(doc_id: str, style: str = "vancouver"):
         "estilo": style,
         "cita": citation
     }
+
+# --- Nuevos Endpoints Fase 2 (UI Revamp) ---
+
+# Mount static files (PDFs)
+# Nota: Esto expone todos los PDFs públicamente sin auth (según plan aceptado)
+app.mount("/static/pdfs", StaticFiles(directory="data/uploads"), name="pdfs")
+app.mount("/static/uploads_channels", StaticFiles(directory="data/uploads_channels"), name="pdfs_channels")
+
+
+@app.post("/chat/{paper_id}")
+async def chat_paper(paper_id: str, payload: Dict[str, str]):
+    """
+    Endpoint para chatear con un paper específico.
+    Payload: {"question": "¿Cuál es la conclusión?"}
+    """
+    question = payload.get("question")
+    if not question:
+        raise HTTPException(status_code=400, detail="Falta la pregunta")
+        
+    answer = analysis_core.chat_with_paper(paper_id, question)
+    return {"answer": answer}
+
+@app.put("/papers/{paper_id}")
+async def update_paper_metadata(paper_id: str, updates: Dict):
+    """
+    Actualiza metadatos de un paper manualmente.
+    """
+    from services.database import get_db_service
+    db = get_db_service()
+    
+    try:
+        # Extraer campos permitidos
+        valid_fields = ["titulo", "autores", "año", "especialidad", "tipo_estudio"]
+        clean_updates = {k: v for k, v in updates.items() if k in valid_fields}
+        
+        paper = db.update_paper(paper_id, **clean_updates)
+        if not paper:
+            raise HTTPException(status_code=404, detail="Paper no encontrado")
+            
+        return paper.to_dict()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

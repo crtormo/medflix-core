@@ -56,6 +56,8 @@ class ChannelIngestor:
         processed = 0
         max_id_seen = last_id
         
+        existing_count = 0
+        
         # Iterar mensajes (desde el más nuevo)
         async for message in self.client.iter_messages(channel_username, limit=limit):
             # Si llegamos a mensajes ya vistos, paramos (si last_id > 0)
@@ -81,7 +83,8 @@ class ChannelIngestor:
                         logger.error(f"Error descargando {file_name}: {e}")
                         continue
                 else:
-                    logger.info(f"Archivo ya existe: {file_name}")
+                    # logger.info(f"Archivo ya existe en disco: {file_name}")
+                    pass
 
                 # PROCESAR CON MEDFLIX CORE (Siempre, el Core maneja deduplicación por hash)
                 if self.core:
@@ -101,7 +104,8 @@ class ChannelIngestor:
                             logger.info(f"✅ Análisis completado: {result.get('doc_id')}")
                             processed += 1
                         elif status == 'duplicate':
-                             logger.info(f"⚠️ Duplicado detectado: {result.get('reason')} (Data: {result.get('data')})")
+                             # logger.info(f"⚠️ Duplicado detectado: {result.get('reason')} (Data: {result.get('data')})")
+                             existing_count += 1
                         else:
                             logger.warning(f"❌ Falló análisis: {result}")
                             
@@ -112,7 +116,7 @@ class ChannelIngestor:
         if max_id_seen > last_id:
             self.db.update_channel_scan(channel_pk, max_id_seen)
                     
-        logger.info(f"🏁 Finalizado {channel_username}. Nuevos: {count}. Analizados: {processed}.")
+        logger.info(f"🏁 Finalizado {channel_username}. \n📊 Resumen: \n   - 📥 Nuevos Procesados: {processed} \n   - ♻️ Ya Existentes (Duplicados): {existing_count} \n   - 💾 Descargados: {count}")
 
     async def run_all(self):
         """Escanea todos los canales activos de la base de datos"""

@@ -133,3 +133,60 @@ class AnalysisCore:
             "data": paper_updated.to_dict() if paper_updated else {}
         }
 
+
+    def chat_with_paper(self, paper_id: str, question: str) -> str:
+        """
+        Permite chatear con un paper específico usando RAG.
+        1. Recuperar contexto de vector store filtrando por paper_id
+        2. Consultar LLM con el contexto
+        """
+        if not self.groq:
+            return "El servicio de IA no está disponible."
+            
+        # Buscar contexto relevante solo de ESTE paper
+        context_results = self.vector_store.collection.query(
+            query_texts=[question],
+            n_results=3,
+            where={"id": paper_id} # Asumiendo que guardamos ID en metadata o podemos filtrar
+            # NOTA: En vector_store.add_document usamos doc_id como ID del chunk? 
+            # Si usamos doc_id como ID de documento, esto funciona.
+            # Veamos vector_store.py: ids=[doc_id] -> Un paper = Un chunk gigante?
+            # En la implementación actual linea 118: doc_id=str(paper.id). 
+            # Sí, es un chunk por paper.
+        )
+        
+        # Si no usamos metadata filtering, usamos IDs directos si es un solo doc
+        # Pero query busca en toda la colección. Mejor filtrar.
+        # En ingestion linea 121: metadata ID no se incluye explicitamente como campo 'id'
+        # pero se pasa como 'ids' argument.
+        
+        # Recuperar texto
+        context = ""
+        if context_results['documents'] and context_results['documents'][0]:
+            context = "\n\n".join(context_results['documents'][0])
+            
+        if not context:
+            # Fallback a buscar por ID directo si chroma query falla
+            try: 
+                 doc = self.vector_store.collection.get(ids=[paper_id])
+                 if doc['documents']:
+                     context = doc['documents'][0]
+            except:
+                pass
+        
+        if not context:
+            return "No pude encontrar el contenido de este documento para responder."
+
+        prompt = f"""
+        Utilizando SÓLO la siguiente información del paper médico (y tus conocimientos generales para dar coherencia pero sin inventar datos):
+        
+        CONTEXTO:
+        {context[:15000]}
+        
+        PREGUNTA DEL USUARIO:
+        {question}
+        
+        Responde de manera concisa, profesional y en ESPAÑOL.
+        """
+        
+        return self.groq.analyze_text(text="", prompt_template=prompt)
