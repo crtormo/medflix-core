@@ -360,20 +360,19 @@ elif st.session_state.current_view == "catalog":
             img_path = paper.get("thumbnail_path") 
             
             # Resolver ruta de imagen 
-            # Si es local path, necesitamos transformarla a URL servible o usar placeholder
-            # Para Streamlit standard, image paths locales funcionan si están en static, pero aquí no lo están
-            # MVP: Usar placeholder si no es http
-            if not img_path or "http" not in img_path:
-                 # TODO: Servir imagenes estáticas real en v2.1
-                img_url = f"https://via.placeholder.com/300x160/1a1a1a/cccccc?text={ptype}"
+            # Si es local path, la convertimos a URL del endpoint estático de FastAPI
+            if img_path:
+                filename = Path(img_path).name
+                img_url = f"{API_URL}/static/thumbnails/{filename}"
             else:
-                img_url = img_path
+                 # Placeholder si no hay imagen
+                img_url = f"https://via.placeholder.com/300x160/1a1a1a/cccccc?text={ptype}"
 
             with st.container():
-                st.image(img_url, use_column_width=True)
+                st.image(img_url, use_container_width=True)
                 st.markdown(f"**{title}**")
                 st.markdown(f"<span class='score-badge'>{int(score*10)}% Match</span> <span class='quality-hd'>{ptype}</span> {year}", unsafe_allow_html=True)
-                if st.button("Ver Análisis", key=f"btn_{paper['id']}"):
+                if st.button("Ver Análisis", key=f"btn_{paper['id']}", use_container_width=True):
                     st.session_state.selected_paper_id = paper['id']
                     st.rerun()
 

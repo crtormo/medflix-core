@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import os
@@ -14,6 +15,12 @@ from .schemas import UploadResponse, JobStatusResponse
 load_dotenv()
 
 app = FastAPI(title="MedFlix Core API")
+
+# Mount static files (thumbnails)
+# Asegurar que el directorio existe
+counts_dir = Path("data/thumbnails")
+counts_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/static/thumbnails", StaticFiles(directory="data/thumbnails"), name="thumbnails")
 
 # CORS setup (permitir todo por ahora para desarrollo)
 app.add_middleware(
