@@ -13,3 +13,8 @@ pydantic-settings
 citeproc-py-styles
 citeproc-py
 jinja2
+sqlalchemy
+psycopg2-binary
+telethon
+
+

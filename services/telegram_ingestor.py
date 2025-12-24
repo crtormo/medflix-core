@@ -1,58 +1,139 @@
 import os
 import asyncio
+import logging
 from telethon import TelegramClient
-from telethon.tl.types import MessageMediaDocument
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Importar DB Service
+from services.database import get_db_service
+from core.analysis import AnalysisCore
+
+# Configuración de Logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
 # Credenciales de my.telegram.org (UserBot)
 API_ID = os.getenv("TELEGRAM_API_ID")
 API_HASH = os.getenv("TELEGRAM_API_HASH")
-SESSION_NAME = 'medflix_userbot_session'
+# Guardar sesión en volumen persistente
+SESSION_PATH = Path("data/medflix_userbot") 
+SESSION_NAME = str(SESSION_PATH)
 
-if not API_ID or not API_HASH:
-    print("Error: TELEGRAM_API_ID or TELEGRAM_API_HASH missing in .env")
-    # No salimos aqui para permitir importar la clase y ver el error despues si se instancia
-    
 DOWNLOAD_DIR = Path("data/uploads_channels")
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 class ChannelIngestor:
     def __init__(self):
-        self.client = TelegramClient(SESSION_NAME, API_ID, API_HASH)
-
-    async def ingest_channel(self, channel_username: str, limit: int = 50):
-        """Descarga PDFs de un canal especifico"""
-        await self.client.start()
+        if not API_ID or not API_HASH:
+             raise ValueError("TELEGRAM_API_ID y TELEGRAM_API_HASH son requeridos en .env")
+             
+        self.client = TelegramClient(SESSION_NAME, int(API_ID), API_HASH)
+        self.db = get_db_service()
         
-        print(f"📥 Scaneando canal: {channel_username}...")
+        # Inicializar Core para análisis
+        try:
+            self.core = AnalysisCore()
+            logger.info("AnalysisCore inicializado correctamente.")
+        except Exception as e:
+            logger.error(f"Error inicializando AnalysisCore: {e}")
+            self.core = None
+
+    async def ingest_channel(self, channel_data, limit: int = 50):
+        """Descarga y ANALIZA PDFs de un canal específico usando puntero de DB"""
+        channel_username = channel_data.username
+        last_id = channel_data.last_scanned_id
+        channel_pk = str(channel_data.id)
+        
+        logger.info(f"📥 Escaneando canal: {channel_username} (Last ID: {last_id})...")
         
         count = 0
+        processed = 0
+        max_id_seen = last_id
+        
+        # Iterar mensajes (desde el más nuevo)
         async for message in self.client.iter_messages(channel_username, limit=limit):
+            # Si llegamos a mensajes ya vistos, paramos (si last_id > 0)
+            if last_id > 0 and message.id <= last_id:
+                logger.info(f"🛑 Alcanzado último mensaje visto ({last_id}). Deteniendo escaneo.")
+                break
+            
+            # Actualizar max_id para guardar progreso
+            if message.id > max_id_seen:
+                max_id_seen = message.id
+
             if message.document and message.file.mime_type == 'application/pdf':
                 file_name = message.file.name or f"doc_{message.id}.pdf"
                 file_path = DOWNLOAD_DIR / file_name
                 
-                # Check si ya existe (simple check de nombre por ahora, el hash check real lo hace el ingestion service despues)
+                # Descargar si no existe
                 if not file_path.exists():
-                    print(f"Descargando: {file_name}")
-                    await message.download_media(file=file_path)
-                    count += 1
+                    logger.info(f"Descargando: {file_name}")
+                    try:
+                        await message.download_media(file=file_path)
+                        count += 1
+                    except Exception as e:
+                        logger.error(f"Error descargando {file_name}: {e}")
+                        continue
                 else:
-                    print(f"Skipping {file_name}, existe en disco local.")
+                    logger.info(f"Archivo ya existe: {file_name}")
+
+                # PROCESAR CON MEDFLIX CORE (Siempre, el Core maneja deduplicación por hash)
+                if self.core:
+                    # logger.info(f"🧠 Verificado/Analizando {file_name}...")
+                    try:
+                        # Ejecutar en thread pool para no bloquear loop async
+                        loop = asyncio.get_running_loop()
+                        result = await loop.run_in_executor(
+                            None, 
+                            self.core.process_and_analyze, 
+                            str(file_path)
+                        )
+                        
+                        status = result.get('status')
+                        logger.info(f"DEBUG: Result status for {file_name}: {status}") 
+                        if status == 'success':
+                            logger.info(f"✅ Análisis completado: {result.get('doc_id')}")
+                            processed += 1
+                        elif status == 'duplicate':
+                             logger.info(f"⚠️ Duplicado detectado: {result.get('reason')} (Data: {result.get('data')})")
+                        else:
+                            logger.warning(f"❌ Falló análisis: {result}")
+                            
+                    except Exception as e:
+                        logger.error(f"Error procesando {file_name}: {e}")
+        
+        # Actualizar DB con el nuevo puntero
+        if max_id_seen > last_id:
+            self.db.update_channel_scan(channel_pk, max_id_seen)
                     
-        print(f"✅ Descarga completada. {count} nuevos archivos en {DOWNLOAD_DIR}")
-        print("💡 Nota: Ejecuta el proceso de 'Ingesta masiva' (pendiente) para analizarlos en MedFlix.")
+        logger.info(f"🏁 Finalizado {channel_username}. Nuevos: {count}. Analizados: {processed}.")
+
+    async def run_all(self):
+        """Escanea todos los canales activos de la base de datos"""
+        await self.client.start()
+        channels = self.db.get_all_channels()
+        
+        if not channels:
+            logger.warning("No hay canales configurados en la base de datos.")
+            return
+
+        logger.info(f"🔄 Iniciando escaneo de {len(channels)} canales...")
+        for ch in channels:
+            try:
+                await self.ingest_channel(ch)
+            except Exception as e:
+                logger.error(f"Error escaneando canal {ch.username}: {e}")
+
 
 if __name__ == "__main__":
     import sys
     
-    if not API_ID:
-        print("❌ Configura TELEGRAM_API_ID y TELEGRAM_API_HASH en .env primero.")
-        exit(1)
-        
     # Argumentos CLI: python -m services.telegram_ingestor @Canal [limit]
     if len(sys.argv) > 1:
         target_channel = sys.argv[1]
@@ -64,3 +145,4 @@ if __name__ == "__main__":
     
     ingestor = ChannelIngestor()
     asyncio.run(ingestor.ingest_channel(target_channel, limit))
+

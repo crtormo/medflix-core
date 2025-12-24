@@ -6,6 +6,8 @@ from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, Messa
 from dotenv import load_dotenv
 from pathlib import Path
 from core.analysis import AnalysisCore
+from services.groq_service import GroqService
+from services.reference_generator import ReferenceGenerator
 
 # Configuración de Logging
 logging.basicConfig(
@@ -18,10 +20,17 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # Instancia global del Core
 # En producción, gestionar esto con cuidado para threads/async
-analysis_core = AnalysisCore()
+try:
+    analysis_core = AnalysisCore()
+except Exception as e:
+    logging.error(f"Error inicializando AnalysisCore: {e}")
+    analysis_core = None
 
 UPLOAD_DIR = Path("data/uploads_telegram")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+# Generador de referencias
+reference_generator = ReferenceGenerator()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
@@ -30,6 +39,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not analysis_core:
+        await update.message.reply_text("❌ El sistema de análisis no está disponible en este momento.")
+        return
+
     document = update.message.document
     
     # Verificar que sea PDF
@@ -96,13 +109,15 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja consultas de texto (RAG simple)"""
+    if not analysis_core:
+        await update.message.reply_text("❌ El sistema no está disponible.")
+        return
+
     query = update.message.text
     
     await update.message.reply_chat_action("typing")
     
     # Consulta a ChromaDB
-    # TODO: Mejorar esto para que use el LLM para sintetizar la respuesta, 
-    # por ahora devolvemos los chunks crudos o títulos.
     results = analysis_core.vector_store.query_similar(query, n_results=3)
     
     if not results['ids'][0]:
@@ -118,20 +133,58 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(response_text, parse_mode='Markdown')
 
+async def citar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Comando /citar {doc_id} - Genera cita Vancouver para un paper
+    Uso: /citar abc123 o /citar abc123 apa
+    """
+    if not analysis_core:
+        await update.message.reply_text("❌ El sistema no está disponible.")
+        return
+    
+    args = context.args
+    if not args:
+        await update.message.reply_text(
+            "📝 *Uso:* `/citar {doc_id} [estilo]`\n\n"
+            "Ejemplo: `/citar abc123` o `/citar abc123 apa`\n"
+            "Estilos disponibles: vancouver (default), apa",
+            parse_mode='Markdown'
+        )
+        return
+    
+    doc_id = args[0]
+    style = args[1] if len(args) > 1 else "vancouver"
+    
+    # Buscar documento
+    results = analysis_core.vector_store.collection.get(ids=[doc_id])
+    
+    if not results['ids']:
+        await update.message.reply_text(f"❌ No encontré un documento con ID: {doc_id}")
+        return
+    
+    metadata = results['metadatas'][0] if results['metadatas'] else {}
+    citation = reference_generator.generate_citation(metadata, style=style)
+    
+    await update.message.reply_text(
+        f"📋 *Cita ({style.upper()}):*\n\n`{citation}`",
+        parse_mode='Markdown'
+    )
+
 if __name__ == '__main__':
     if not TOKEN:
-        print("Error: TELEGRAM_BOT_TOKEN not found in environment variables.")
-        exit(1)
-
-    application = ApplicationBuilder().token(TOKEN).build()
-    
-    start_handler = CommandHandler('start', start)
-    doc_handler = MessageHandler(filters.Document.PDF, handle_document)
-    text_handler = MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text)
-    
-    application.add_handler(start_handler)
-    application.add_handler(doc_handler)
-    application.add_handler(text_handler)
-    
-    print("Bot is polling...")
-    application.run_polling()
+        print("Error: TELEGRAM_BOT_TOKEN no encontrada en variables de entorno.")
+    else:
+        application = ApplicationBuilder().token(TOKEN).build()
+        
+        start_handler = CommandHandler('start', start)
+        citar_handler = CommandHandler('citar', citar_command)
+        doc_handler = MessageHandler(filters.Document.PDF, handle_document)
+        text_handler = MessageHandler(filters.TEXT & (~filters.COMMAND), handle_text)
+        
+        application.add_handler(start_handler)
+        application.add_handler(citar_handler)
+        application.add_handler(doc_handler)
+        application.add_handler(text_handler)
+        
+        print("Bot iniciado. Escuchando...")
+        application.run_polling()

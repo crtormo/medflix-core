@@ -7,3 +7,16 @@ venv/
 data/
 *.pdf
 .DS_Store
+
+# Telegram session files
+*.session
+*.session-journal
+
+# Logs
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

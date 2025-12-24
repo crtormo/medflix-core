@@ -1,0 +1,29 @@
+# MedFlix Core - Archivo .dockerignore
+# Ignorar archivos innecesarios para el build
+
+# Entorno virtual
+venv/
+.venv/
+__pycache__/
+
+# Archivos de desarrollo
+*.pyc
+*.pyo
+*.log
+.git/
+.gitignore
+
+# Archivos de sesión
+*.session
+*.session-journal
+
+# IDE
+.vscode/
+.idea/
+
+# Datos locales (se montan como volumen)
+data/
+
+# Archivos de entorno (se pasan via env_file)
+.env
+.env.local

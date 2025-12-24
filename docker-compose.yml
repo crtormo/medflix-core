@@ -1,0 +1,86 @@
+# MedFlix Core - Docker Compose
+version: '3.8'
+
+services:
+  # Base de Datos PostgreSQL
+  db:
+    image: postgres:16-alpine
+    container_name: medflix-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-medflix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-medflix_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-medflix_db}
+    volumes:
+      - medflix-postgres:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+    networks:
+      - medflix-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-medflix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Backend (FastAPI)
+  api:
+    build: .
+    container_name: medflix-api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8005 --reload
+    ports:
+      - "8005:8005"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - medflix-network
+
+  # Interfaz Web (Streamlit) - Catálogo Netflix
+  ui:
+    build: .
+    container_name: medflix-ui
+    command: streamlit run ui/catalog.py --server.port 8502 --server.address 0.0.0.0
+    ports:
+      - "8502:8502"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    env_file:
+      - .env
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - medflix-network
+
+  # Bot de Telegram
+  bot:
+    build: .
+    container_name: medflix-bot
+    command: python -m services.telegram_bot
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    env_file:
+      - .env
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - medflix-network
+
+volumes:
+  medflix-postgres:
+    driver: local
+
+networks:
+  medflix-network:
+    driver: bridge
+
