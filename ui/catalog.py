@@ -408,10 +408,62 @@ elif st.session_state.current_view == "browse":
                 st.session_state.page += 1
                 st.rerun()
 
-# 4. VIEW CHANNELS (Legacy)
+# 4. VIEW CHANNELS
 elif st.session_state.current_view == "channels":
-    st.markdown("## 🤖 Gestión de Canales")
-    # ... (copiar código simple de channels anterior si es necesario, o resumido)
-    channels = requests.get(f"{API_URL}/channels").json()
-    for ch in channels:
-        st.info(f"📢 {ch['nombre']} ({ch['username']}) - Último ID: {ch['last_scanned_id']}")
+    st.markdown("## 🤖 Gestión de Canales de Telegram")
+    st.markdown("Configura los canales que MedFlix debe monitorear automáticamente.")
+    
+    # 1. Añadir Canal
+    with st.expander("➕ Añadir Nuevo Canal", expanded=False):
+        c1, c2, c3 = st.columns([3, 2, 1])
+        new_channel = c1.text_input("Username del Canal (ej: @librosmedicina)")
+        new_name = c2.text_input("Nombre Descriptivo (Opcional)")
+        if c3.button("Añadir", type="primary", use_container_width=True):
+            if new_channel:
+                try:
+                    res = requests.post(f"{API_URL}/channels", params={"username": new_channel, "nombre": new_name})
+                    if res.status_code == 200:
+                        st.success(f"Canal {new_channel} añadido correctamente")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(f"Error: {res.text}")
+                except Exception as e:
+                    st.error(f"Error de conexión: {e}")
+    
+    # 2. Lista de Canales
+    st.markdown("### Canales Monitoreados")
+    
+    # Trigger Escaneo Manual
+    if st.button("🔄 Escanear Todos Ahora"):
+        try:
+            requests.post(f"{API_URL}/scan-channels")
+            st.toast("Escaneo iniciado en segundo plano...")
+        except:
+            st.error("No se pudo iniciar el escaneo")
+
+    try:
+        channels = requests.get(f"{API_URL}/channels").json()
+        if not channels:
+            st.info("No hay canales configurados.")
+        else:
+            for ch in channels:
+                with st.container():
+                    st.markdown(f"""
+                    <div style="background-color: #1f1f1f; padding: 15px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h4 style="margin:0; color:white;">{ch['nombre']}</h4>
+                            <code style="color:#a3a3a3;">{ch['username']}</code>
+                        </div>
+                        <div style="text-align: right;">
+                             <p style="margin:0; font-size: 0.8rem; color:#a3a3a3;">Último escaneo: {ch['last_scan_date'] or 'Nunca'}</p>
+                             <p style="margin:0; font-size: 0.8rem; color:#46d369;">ID: {ch['last_scanned_id']}</p>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if st.button("🗑️ Eliminar", key=f"del_{ch['username']}"):
+                        requests.delete(f"{API_URL}/channels/{ch['username']}")
+                        st.rerun()
+                        
+    except Exception as e:
+        st.error(f"Error al cargar canales: {e}")
