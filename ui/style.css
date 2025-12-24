@@ -1,0 +1,125 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap');
+
+html,
+body,
+[class*="css"] {
+    font-family: 'Inter', sans-serif;
+    background-color: #141414;
+    color: #e5e5e5;
+}
+
+.stApp {
+    background-color: #141414;
+}
+
+/* --- Hero Section --- */
+.hero-container {
+    position: relative;
+    width: 100%;
+    height: 60vh;
+    /* Ocupa 60% del viewport */
+    min-height: 400px;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    margin-bottom: 30px;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-end;
+}
+
+.hero-overlay {
+    background: linear-gradient(to top, #141414 10%, rgba(20, 20, 20, 0.8) 50%, rgba(20, 20, 20, 0.2) 100%);
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}
+
+.hero-content {
+    position: relative;
+    z-index: 2;
+    padding: 40px;
+    max-width: 60%;
+    animation: fadeIn 1.5s ease-out;
+}
+
+.hero-title {
+    font-size: 3.5rem;
+    font-weight: 900;
+    margin-bottom: 10px;
+    line-height: 1.1;
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.7);
+}
+
+.hero-meta {
+    font-size: 1.1rem;
+    color: #46d369;
+    /* Netflix match green or similar */
+    margin-bottom: 15px;
+    font-weight: 600;
+}
+
+.hero-desc {
+    font-size: 1.1rem;
+    margin-bottom: 25px;
+    color: #cccccc;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-shadow: 1px 1px 4px rgba(0, 0, 0, 0.7);
+}
+
+/* --- Swimlanes & Cards --- */
+.swimlane-header {
+    margin-top: 30px;
+    margin-bottom: 10px;
+    font-weight: 700;
+    font-size: 1.2rem;
+    color: #e5e5e5;
+    padding-left: 5px;
+    border-left: 4px solid #e50914;
+    /* Red accent */
+}
+
+/* Tarjetas */
+.paper-card-container {
+    background-color: #1f1f1f;
+    border-radius: 4px;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    cursor: pointer;
+    overflow: hidden;
+    position: relative;
+    height: 100%;
+    border: 1px solid #333;
+}
+
+.paper-card-container:hover {
+    transform: scale(1.05);
+    z-index: 10;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.8);
+    border-color: #555;
+}
+
+/* Streamlit Details overwrite */
+div[data-testid="stMetricValue"] {
+    color: #46d369;
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

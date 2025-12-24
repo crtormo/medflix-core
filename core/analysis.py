@@ -1,3 +1,4 @@
+import os
 from .ingestion import IngestionService
 from .visual_analysis import VisualAnalysisService
 from services.groq_service import GroqService
@@ -69,8 +70,10 @@ class AnalysisCore:
         graphs_analysis: List[Dict] = []
         
         if self.groq:
-            # Auditoría Epistemológica
-            analysis_result = self.groq.epistemological_audit(doc_data['content'])
+            # Auditoría Epistemológica (Ahora retorna JSON)
+            audit_data = self.groq.epistemological_audit(doc_data['content'])
+            analysis_result = audit_data.get("analisis_critico", "Error en análisis")
+            veredicto = audit_data.get("veredicto_breve", "")
             
             # Snippets enriquecidos (JSON estructurado)
             snippets = self.groq.generate_snippets(doc_data['content'])
@@ -91,19 +94,78 @@ class AnalysisCore:
             final_ano = enriched_meta.get('año') or snippets.get('year')
             final_titulo = enriched_meta.get('titulo') or doc_data['title']
             
-            # Actualizar campos clave del paper base si mejoraron
-            # Nota: Esto debería hacerse idealmente antes, pero lo hacemos en el update
+            # --- RENOMBRADO DE ARCHIVO FÍSICO ---
+            # Intentar renombrar el archivo a algo legible
+            new_filename = snippets.get("suggested_filename")
+            if not new_filename and final_titulo:
+                 # Sanitizar titulo si no hay sugerencia
+                 import re
+                 clean = re.sub(r'[^a-zA-Z0-9]', '_', final_titulo)[:50]
+                 new_filename = f"{clean}"
             
+            final_path = str(path)
+            final_name = path.name
+            
+            if new_filename:
+                try:
+                    # Asegurar extensión .pdf
+                    if not new_filename.lower().endswith('.pdf'):
+                        new_filename += ".pdf"
+                    
+                    # Directorio original
+                    directory = path.parent
+                    new_path = directory / new_filename
+                    
+                    # Renombrar físico
+                    if not new_path.exists():
+                        os.rename(path, new_path)
+                        final_path = str(new_path)
+                        final_name = new_filename
+                        logger.info(f"♻️ Archivo renombrado: {path.name} -> {new_filename}")
+                    else:
+                        logger.warning(f"No se pudo renombrar a {new_filename}, el archivo ya existe.")
+                except Exception as e:
+                    logger.error(f"Error renombrando archivo: {e}")
+
             # 5. Análisis Visual de Gráficos
             if analyze_graphs:
                 try:
                     conclusion_hint = snippets.get('summary_slide', '')
                     graphs_analysis = self.visual.analyze_all_graphs(
-                        str(path), 
+                        final_path, # Usar el nuevo path
                         paper_conclusion=conclusion_hint
                     )
+                    
+                    # --- EKG DOJO LOGIC ---
+                    # Si el título o tags sugieren ECG, y hay imágenes, generar un reto
+                    is_ecg = "ecg" in final_titulo.lower() or "ekg" in final_titulo.lower() or "electrocardiogram" in final_titulo.lower()
+                    quiz_data = {}
+                    is_quiz = False
+                    
+                    if is_ecg and len(doc_data.get('images', [])) > 0:
+                         # Tomar la primera imagen (idealmente buscaríamos la más relevante)
+                         # Aquí asumimos que doc_data tiene la ruta de imágenes extraidas.
+                         # Ojo: Ingesta actual no extrae imagenes a disco separado salvo thumbnail.
+                         # Usaremos el thumbnail como proxy si es un "caso en una imagen" (típico de telegram)
+                         # O si 'analisis_graficos' tiene algo, usamos esa imagen.
+                         
+                         target_img = None
+                         if paper.thumbnail_path:
+                             target_img = paper.thumbnail_path
+                         
+                         if target_img:
+                             # Convertir a data URI para enviar a Groq Vision
+                             import base64
+                             with open(target_img, "rb") as img_file:
+                                 b64_img = base64.b64encode(img_file.read()).decode('utf-8')
+                                 data_uri = f"data:image/jpeg;base64,{b64_img}"
+                                 
+                                 logger.info("🥋 Generando EKG Dojo Challenge...")
+                                 quiz_data = self.groq.analyze_ekg_challenge(data_uri)
+                                 is_quiz = True
+                    
                 except Exception as e:
-                    logger.error(f"Error en análisis visual: {e}")
+                    logger.error(f"Error en análisis visual / EKG: {e}")
         
         # 6. Actualizar DB con resultados completos
         # Preparar datos de update incluyendo enriquecidos
@@ -112,9 +174,9 @@ class AnalysisCore:
             analysis_data={
                 "analisis_completo": analysis_result,
                 "resumen_slide": snippets.get('summary_slide'),
-                "score_calidad": snippets.get('quality_score'),
+                "score_calidad": audit_data.get("score_calidad") or snippets.get('quality_score'), # Priorizar deep model
                 "tipo_estudio": snippets.get('study_type'),
-                "especialidad": snippets.get('specialty') or snippets.get('study_type'), # Fallback
+                "especialidad": snippets.get('specialty') or snippets.get('study_type'),
                 "n_muestra": snippets.get('n_study'),
                 "nnt": snippets.get('nnt'),
                 "num_graficos": len(graphs_analysis),
@@ -123,16 +185,33 @@ class AnalysisCore:
                 "tags": snippets.get('tags'),
                 "poblacion": snippets.get('population'),
                 "año": final_ano,
-                # Campos Nuevos Enriquecidos
+                # Campos Nuevos
                 "revista": enriched_meta.get('revista'),
                 "fecha_publicacion_exacta": enriched_meta.get('fecha_publicacion'),
-                # "impact_factor": "N/A" # Pendiente: no lo da CrossRef directo
+                "veredicto_ia": veredicto,
+                "abstract": enriched_meta.get('abstract')
             }
         )
         
-        # Si el título mejoró con DOI, actualizarlo también
+        # Update Quiz Data
+        if is_quiz:
+             self.db_service.update_paper(str(paper.id), is_quiz=True, quiz_data=quiz_data)
+        
+        # Actualizar paths y título si cambiaron
+        updates = {}
+        if final_path != str(path):
+            updates["archivo_path"] = final_path
+            updates["archivo_nombre"] = final_name
+            # Thumbnails también suelen basarse en nombre, pero aquí es path separado. OK.
+            
         if enriched_meta.get('titulo'):
-             self.db_service.update_paper(str(paper.id), titulo=enriched_meta.get('titulo'))
+            updates["titulo"] = enriched_meta.get('titulo')
+        
+        if enriched_meta.get('autores'):
+            updates["autores"] = enriched_meta.get('autores')
+            
+        if updates:
+            self.db_service.update_paper(str(paper.id), **updates)
         
         # 7. Guardar en ChromaDB (para búsqueda semántica)
         # Usamos el análisis y metadatos clave para el embedding

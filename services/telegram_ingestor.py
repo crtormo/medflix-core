@@ -44,13 +44,14 @@ class ChannelIngestor:
             logger.error(f"Error inicializando AnalysisCore: {e}")
             self.core = None
 
-    async def ingest_channel(self, channel_data, limit: int = 50):
+    async def ingest_channel(self, channel_data, limit: int = None):
         """Descarga y ANALIZA PDFs de un canal específico usando puntero de DB"""
         channel_username = channel_data.username
         last_id = channel_data.last_scanned_id
         channel_pk = str(channel_data.id)
         
-        logger.info(f"📥 Escaneando canal: {channel_username} (Last ID: {last_id})...")
+        limit_str = "Infinito" if limit is None else str(limit)
+        logger.info(f"📥 Escaneando canal: {channel_username} (Last ID: {last_id}). Límite: {limit_str}")
         
         count = 0
         processed = 0
@@ -74,36 +75,70 @@ class ChannelIngestor:
                 if message.id > max_id_seen:
                     max_id_seen = message.id
                 
-                if message.document and message.file.mime_type == 'application/pdf':
+                # Determinar si es PDF o Imagen (para canales ECG)
+                is_pdf = message.document and message.file.mime_type == 'application/pdf'
+                is_image = message.photo or (message.document and message.file.mime_type and message.file.mime_type.startswith('image/'))
+                
+                target_file = None
+                
+                if is_pdf:
                     file_name = message.file.name or f"doc_{message.id}.pdf"
-                    file_path = DOWNLOAD_DIR / file_name
+                    target_file = DOWNLOAD_DIR / file_name
+                elif is_image:
+                    # Solo procesar imágenes si parece ser un canal clínico/ECG (para no bajar memes)
+                    # O simplemente bajamos todo de los canales monitoreados.
+                    # Vamos a bajar todo y convertir.
+                    file_name = f"img_{message.id}.jpg"
+                    original_img_path = DOWNLOAD_DIR / file_name
+                    target_file = DOWNLOAD_DIR / f"ecg_case_{message.id}.pdf"
+                
+                if target_file:
                     
-                    # Descargar si no existe
-                    if not file_path.exists():
-                        scan_status.log(f"📥 Descargando: {file_name}...")
+                    # Descargar (PDF directo o Imagen->PDF)
+                    if not target_file.exists():
+                        scan_status.log(f"📥 Detectado contenido: {message.id}...")
                         try:
-                            await message.download_media(file=file_path)
+                            if is_pdf:
+                                await message.download_media(file=target_file)
+                            elif is_image:
+                                # Descargar imagen temporalmente
+                                if not original_img_path.exists():
+                                    await message.download_media(file=original_img_path)
+                                
+                                # Convertir a PDF
+                                if original_img_path.exists() and original_img_path.stat().st_size > 0:
+                                    try:
+                                        import img2pdf
+                                        with open(target_file, "wb") as f:
+                                            f.write(img2pdf.convert(str(original_img_path)))
+                                        # Eliminar imagen original para ahorrar espacio
+                                        original_img_path.unlink()
+                                        scan_status.log(f"🖼️ Convertido a PDF: {target_file.name}")
+                                    except ImportError:
+                                        # Fallback si no hay img2pdf, usar PIL
+                                        from PIL import Image
+                                        image = Image.open(original_img_path)
+                                        pdf_bytes = image.convert('RGB')
+                                        pdf_bytes.save(target_file)
+                                        original_img_path.unlink()
+                                    except Exception as e:
+                                        logger.error(f"Error conversión img->pdf: {e}")
                             
                             # Validar descarga
-                            if file_path.stat().st_size == 0:
-                                logger.error(f"⚠️ Archivo vacío descargado: {file_name}")
-                                file_path.unlink() # Borrar
-                                scan_status.log(f"⚠️ Error: Archivo vacío {file_name}")
+                            if target_file.exists() and target_file.stat().st_size == 0:
+                                logger.error(f"⚠️ Archivo vacío creado: {target_file.name}")
+                                target_file.unlink()
                                 continue
                                 
                             count += 1
                         except FloodWaitError as e:
-                            logger.warning(f"⏳ FloodWait de Telegram: Esperando {e.seconds}s...")
-                            scan_status.log(f"⏳ Límite Telegram. Pausando {e.seconds}s...")
+                            logger.warning(f"⏳ FloodWait: {e.seconds}s")
                             await asyncio.sleep(e.seconds)
-                            # Reintentar descarga tras espera? Por simplicidad, saltamos y seguimos o el loop reintenta siguiente
                             continue 
                         except Exception as e:
-                            logger.error(f"Error descargando {file_name}: {e}")
-                            scan_status.log(f"❌ Error descarga {file_name}: {str(e)[:20]}")
+                            logger.error(f"Error descargando: {e}")
                             continue
                     else:
-                        # logger.info(f"Archivo ya existe en disco: {file_name}")
                         pass
 
                     # PROCESAR CON MEDFLIX CORE
@@ -114,7 +149,7 @@ class ChannelIngestor:
                             result = await loop.run_in_executor(
                                 None, 
                                 self.core.process_and_analyze, 
-                                str(file_path)
+                                str(target_file)
                             )
                             
                             status = result.get('status')

@@ -83,4 +83,3 @@ volumes:
 networks:
   medflix-network:
     driver: bridge
-

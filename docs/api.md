@@ -30,6 +30,7 @@ Obtiene el catálogo de papers con opciones de filtrado y paginación.
   - `offset` (int, default: 0)
   - `specialty` (str, opcional)
   - `sort` (str: "recent" | "quality")
+  - `is_quiz` (bool: true para filtrar solo desafíos EKG)
 - **Respuesta**: Lista de objetos `Paper` simplificados (Card format).
 
 ### Detalle de Paper
@@ -63,6 +64,11 @@ Realiza preguntas específicas sobre el contenido de un paper.
     "answer": "Según el estudio, la dosis es..."
   }
   ```
+
+### Archivos Estáticos (PDFs)
+Acceso directo a los archivos PDF almacenados.
+- **Uploads Web**: `/static/pdfs/{filename}`
+- **Telegram Channels**: `/static/uploads_channels/{filename}`
 
 ---
 

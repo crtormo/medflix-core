@@ -13,6 +13,7 @@
 
 - **🧠 Auditoría Epistemológica con IA**: Análisis profundo utilizando Llama-3 (vía Groq) para evaluar validez interna/externa, sesgos y relevancia clínica.
 - **🎬 Interfaz "Netflix-Style"**: Catálogo visual oscuro y moderno para explorar tu biblioteca médica.
+- **🥋 EKG Dojo**: Desafíos interactivos de diagnóstico electrocardiográfico generados por IA a partir de casos reales.
 - **🤖 Bot de Telegram & UserBot**: Auto-ingestión de papers desde canales de Telegram y subida directa vía chat personal.
 - **🔍 Búsqueda Semántica (RAG)**: Encuentra respuestas exactas dentro de miles de papers usando ChromaDB.
 - **📊 Dashboard de Métricas**: Visualización de scores de calidad, rigor metodológico e impacto innovador.

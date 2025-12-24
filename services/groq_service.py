@@ -176,7 +176,54 @@ class GroqService:
             return chat_completion.choices[0].message.content
         except Exception as e:
             return f"Error analizando imagen: {str(e)}"
-
+    def analyze_ekg_challenge(self, image_url: str) -> Dict:
+        """
+        Analiza una imagen de EKG y genera un desafío diagnóstico.
+        Retorna JSON con pregunta, opciones y respuesta.
+        """
+        prompt = """
+        Eres un experto cardiólogo docente. Analiza este ECG cuidadosamente.
+        Genera un desafío de diagnóstico para médicos residentes en formato JSON.
+        
+        Tu salida debe ser ESTRICTAMENTE este JSON:
+        {
+            "question": "¿Cuál es el diagnóstico principal basado en este trazado?",
+            "options": [
+                "A: Fibrilación Auricular", 
+                "B: Flutter Auricular",
+                "C: Taquicardia Sinusal",
+                "D: Bloqueo AV 2do Grado"
+            ],
+            "correct_answer": "B",
+            "explanation": "Se observan ondas F en dientes de sierra en DII, DIII y aVF..."
+        }
+        
+        Asegúrate de que las opciones sean plausibles (distractores realistas) y la explicación sea educativa.
+        """
+        
+        try:
+            chat_completion = self.client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": image_url}},
+                        ],
+                    }
+                ],
+                model=self.vision_model,
+                response_format={"type": "json_object"}
+            )
+            return json.loads(chat_completion.choices[0].message.content)
+        except Exception as e:
+            # Fallback simple si falla
+            return {
+                "question": "Analiza este ECG (Error generacion automatica)",
+                "options": ["A", "B", "C", "D"],
+                "correct_answer": "A",
+                "explanation": f"Error: {str(e)}"
+            }
     def generate_snippets(self, text: str) -> Dict:
         """Genera N, NNT, resumen y metadatos estructurados."""
         truncated_text = text[:12000]
@@ -188,13 +235,15 @@ class GroqService:
             "n_study": "Tamaño de la muestra (ej: 1540 pacientes)",
             "nnt": "Número Necesario a Tratar (si aplica, o 'N/A')",
             "summary_slide": "Una frase contundente para una diapositiva (max 20 palabras)",
+            "clinical_implication": "Implicación clínica directa (max 140 chars)",
             "study_type": "Tipo de estudio (RCT, Cohorte, Caso-Control, Meta-análisis, Revisión, Guía, etc.)",
-            "specialty": "Especialidad médica principal (Cardiología, UCI, Neurología, Infectología, etc.)",
+            "specialty": "Especialidad médica principal",
             "quality_score": 8.5,
             "tags": ["tag1", "tag2"],
             "population": "Breve descripción",
             "journal": "Nombre revista",
-            "year": 2024
+            "year": 2024,
+            "suggested_filename": "Titulo_Del_Estudio_Ano (usar guiones bajos, sin espacios, sin caracteres especiales, max 50 chars)"
         }}
         
         Texto del paper:

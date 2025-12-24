@@ -175,6 +175,18 @@ class DatabaseService:
             for paper in papers:
                 session.expunge(paper)
             return papers
+
+    def get_quiz_papers(self, limit: int = 50) -> List[Paper]:
+        """Obtiene papers marcados como Quiz (EKG Dojo)."""
+        with self.get_session() as session:
+            papers = session.query(Paper)\
+                .filter(Paper.is_quiz == True)\
+                .order_by(desc(Paper.fecha_subida))\
+                .limit(limit)\
+                .all()
+            for paper in papers:
+                session.expunge(paper)
+            return papers
     
     def count_papers(self) -> int:
         """Cuenta el total de papers."""

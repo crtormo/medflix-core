@@ -44,9 +44,14 @@ class Paper(Base):
     fecha_publicacion_exacta = Column(String(20)) # "2023-05-12"
     
     # Análisis IA
+    veredicto_ia = Column(String(100)) # "Aprobado", "Evidencia Baja", etc.
     resumen_slide = Column(Text)  # Frase para diapositiva
     analisis_completo = Column(Text)  # Auditoría epistemológica completa
     score_calidad = Column(Float)  # 0-10, calculado de la auditoría
+    
+    # EKG Dojo / Quiz Mode
+    is_quiz = Column(Boolean, default=False, index=True)
+    quiz_data = Column(JSONB, default=dict) # {question, options, correct, explanation}
     
     # Imágenes y Gráficos
     thumbnail_path = Column(String(500))  # Ruta a imagen de portada
@@ -85,6 +90,7 @@ class Paper(Base):
             "poblacion": self.poblacion,
             "impact_factor": self.impact_factor,
             "fecha_publicacion_exacta": self.fecha_publicacion_exacta,
+            "veredicto_ia": self.veredicto_ia,
             "resumen_slide": self.resumen_slide,
             "analisis_completo": self.analisis_completo,
             "score_calidad": self.score_calidad,
@@ -95,7 +101,10 @@ class Paper(Base):
             "num_paginas": self.num_paginas,
             "fecha_subida": self.fecha_subida.isoformat() if self.fecha_subida else None,
             "fecha_analisis": self.fecha_analisis.isoformat() if self.fecha_analisis else None,
-            "procesado": self.procesado
+            "fecha_analisis": self.fecha_analisis.isoformat() if self.fecha_analisis else None,
+            "procesado": self.procesado,
+            "is_quiz": self.is_quiz,
+            "quiz_data": self.quiz_data or {}
         }
     
     def to_card_dict(self):

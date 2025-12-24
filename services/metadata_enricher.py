@@ -44,6 +44,13 @@ class MetadataService:
                 if name:
                     authors.append(name)
             
+            # Abstract (A veces viene como 'abstract' en XML o texto plano)
+            abstract = message.get('abstract', '')
+            if abstract and "<" in abstract:
+                 # Limpiar tags XML básicos si existen
+                 import re
+                 abstract = re.sub('<[^<]+?>', '', abstract)
+            
             return {
                 "doi": doi,
                 "titulo": title,
@@ -51,8 +58,7 @@ class MetadataService:
                 "año": year,
                 "fecha_publicacion": publish_date,
                 "autores": authors,
-                # "publisher": message.get('publisher'),
-                # "type": message.get('type')
+                "abstract": abstract.strip() if abstract else None,
             }
             
         except Exception as e:
