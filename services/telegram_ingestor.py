@@ -60,72 +60,100 @@ class ChannelIngestor:
         
         # Inicializar status global
         from services.scan_status import scan_status
+        from telethon.errors import FloodWaitError, RPCError
         
-        # Iterar mensajes (desde el más nuevo)
-        async for message in self.client.iter_messages(channel_username, limit=limit):
-            # Si llegamos a mensajes ya vistos, paramos (si last_id > 0)
-            if last_id > 0 and message.id <= last_id:
-                logger.info(f"🛑 Alcanzado último mensaje visto ({last_id}). Deteniendo escaneo.")
-                scan_status.log(f"🛑 {channel_username}: Al día.")
-                break
-            
-            # Actualizar max_id para guardar progreso
-            if message.id > max_id_seen:
-                max_id_seen = message.id
-            
-            if message.document and message.file.mime_type == 'application/pdf':
-                file_name = message.file.name or f"doc_{message.id}.pdf"
-                file_path = DOWNLOAD_DIR / file_name
+        try:
+            # Iterar mensajes (desde el más nuevo)
+            async for message in self.client.iter_messages(channel_username, limit=limit):
+                # Si llegamos a mensajes ya vistos, paramos (si last_id > 0)
+                if last_id > 0 and message.id <= last_id:
+                    logger.info(f"🛑 {channel_username}: Alcanzado último mensaje visto ({last_id}).")
+                    break
                 
-                # Descargar si no existe
-                if not file_path.exists():
-                    logger.info(f"Descargando: {file_name}")
-                    scan_status.log(f"📥 Descargando: {file_name}...")
-                    try:
-                        await message.download_media(file=file_path)
-                        count += 1
-                    except Exception as e:
-                        logger.error(f"Error descargando {file_name}: {e}")
-                        continue
-                else:
-                    # logger.info(f"Archivo ya existe en disco: {file_name}")
-                    pass
-
-                # PROCESAR CON MEDFLIX CORE (Siempre, el Core maneja deduplicación por hash)
-                if self.core:
-                    # logger.info(f"🧠 Verificado/Analizando {file_name}...")
-                    try:
-                        # Ejecutar en thread pool para no bloquear loop async
-                        loop = asyncio.get_running_loop()
-                        result = await loop.run_in_executor(
-                            None, 
-                            self.core.process_and_analyze, 
-                            str(file_path)
-                        )
-                        
-                        status = result.get('status')
-                        logger.info(f"DEBUG: Result status for {file_name}: {status}") 
-                        if status == 'success':
-                            logger.info(f"✅ Análisis completado: {result.get('doc_id')}")
-                            scan_status.log(f"✅ Nuevo paper analizado: {result.get('data',{}).get('titulo', file_name)[:30]}...")
-                            scan_status.status["stats"]["nuevos_descargados"] += 1
-                            processed += 1
-                        elif status == 'duplicate':
-                             # logger.info(f"⚠️ Duplicado detectado: {result.get('reason')} (Data: {result.get('data')})")
-                             scan_status.status["stats"]["duplicados"] += 1
-                             existing_count += 1
-                        else:
-                            logger.warning(f"❌ Falló análisis: {result}")
-                            scan_status.log(f"❌ Falló análisis de {file_name}")
+                # Actualizar max_id para guardar progreso
+                if message.id > max_id_seen:
+                    max_id_seen = message.id
+                
+                if message.document and message.file.mime_type == 'application/pdf':
+                    file_name = message.file.name or f"doc_{message.id}.pdf"
+                    file_path = DOWNLOAD_DIR / file_name
+                    
+                    # Descargar si no existe
+                    if not file_path.exists():
+                        scan_status.log(f"📥 Descargando: {file_name}...")
+                        try:
+                            await message.download_media(file=file_path)
                             
-                    except Exception as e:
-                        logger.error(f"Error procesando {file_name}: {e}")
-        
-        # Actualizar DB con el nuevo puntero
+                            # Validar descarga
+                            if file_path.stat().st_size == 0:
+                                logger.error(f"⚠️ Archivo vacío descargado: {file_name}")
+                                file_path.unlink() # Borrar
+                                scan_status.log(f"⚠️ Error: Archivo vacío {file_name}")
+                                continue
+                                
+                            count += 1
+                        except FloodWaitError as e:
+                            logger.warning(f"⏳ FloodWait de Telegram: Esperando {e.seconds}s...")
+                            scan_status.log(f"⏳ Límite Telegram. Pausando {e.seconds}s...")
+                            await asyncio.sleep(e.seconds)
+                            # Reintentar descarga tras espera? Por simplicidad, saltamos y seguimos o el loop reintenta siguiente
+                            continue 
+                        except Exception as e:
+                            logger.error(f"Error descargando {file_name}: {e}")
+                            scan_status.log(f"❌ Error descarga {file_name}: {str(e)[:20]}")
+                            continue
+                    else:
+                        # logger.info(f"Archivo ya existe en disco: {file_name}")
+                        pass
+
+                    # PROCESAR CON MEDFLIX CORE
+                    if self.core:
+                        try:
+                            # Ejecutar en thread pool 
+                            loop = asyncio.get_running_loop()
+                            result = await loop.run_in_executor(
+                                None, 
+                                self.core.process_and_analyze, 
+                                str(file_path)
+                            )
+                            
+                            status = result.get('status')
+                            if status == 'success':
+                                logger.info(f"✅ Análisis completado: {result.get('doc_id')}")
+                                processed += 1
+                                scan_status.status["stats"]["nuevos_descargados"] += 1
+                            elif status == 'duplicate':
+                                 # existing_count += 1 # Opcional contar
+                                 scan_status.status["stats"]["duplicados"] += 1
+                            else:
+                                logger.warning(f"❌ Falló análisis: {result}")
+                                scan_status.log(f"❌ Falló análisis {file_name}")
+                                scan_status.status["stats"]["errores"] += 1
+                                
+                        except Exception as e:
+                            logger.error(f"Error procesando {file_name}: {e}")
+                            scan_status.log(f"❌ Error proceso: {str(e)[:30]}")
+                            scan_status.status["stats"]["errores"] += 1
+            
+            # Al finalizar bucle exitosamente
+            logger.info(f"🏁 {channel_username} escaneado correctamente.")
+
+        except FloodWaitError as e:
+            logger.critical(f"🚨 FloodWait Global en canal {channel_username}: {e.seconds}s")
+            scan_status.log(f"🚨 Límite Global. Pausando {e.seconds}s...")
+            await asyncio.sleep(e.seconds)
+        except RPCError as e:
+            logger.error(f"🚨 Error RPC Telegram en {channel_username}: {e}")
+            scan_status.log(f"🚨 Error Telegram: {e}")
+        except Exception as e:
+            logger.error(f"🚨 Error inesperado en {channel_username}: {e}")
+            
+        # Actualizar DB con el nuevo puntero solo si hubo progreso
         if max_id_seen > last_id:
+            logger.info(f"💾 Actualizando puntero {channel_username} a ID {max_id_seen}")
             self.db.update_channel_scan(channel_pk, max_id_seen)
                     
-        logger.info(f"🏁 Finalizado {channel_username}. \n📊 Resumen: \n   - 📥 Nuevos Procesados: {processed} \n   - ♻️ Ya Existentes (Duplicados): {existing_count} \n   - 💾 Descargados: {count}")
+        logger.info(f"📊 Resumen {channel_username}: Nuevos {processed} | Descargas {count} | Errores {scan_status.status['stats']['errores']}")
 
     async def run_all(self):
         """Escanea todos los canales activos de la base de datos"""
