@@ -43,6 +43,18 @@ class Paper(Base):
     impact_factor = Column(String(50)) # Estimado o Manual
     fecha_publicacion_exacta = Column(String(20)) # "2023-05-12"
     
+    # Metadatos Multi-Fuente (Fase 8)
+    pmid = Column(String(20), index=True)  # PubMed ID
+    mesh_terms = Column(JSONB, default=list)  # ["Cardiovascular Diseases", "Biomarkers/blood"]
+    abstract_estructurado = Column(JSONB, default=dict)  # {antecedentes, metodos, resultados, conclusiones}
+    affiliaciones = Column(JSONB, default=list)  # [{author, institution, country}]
+    funders = Column(JSONB, default=list)  # [{name, doi, award}]
+    license = Column(String(500))  # URL licencia CC-BY, etc.
+    referencias = Column(JSONB, default=list)  # [{doi, key}]
+    crossmark_status = Column(String(50))  # current, updated, retracted
+    metadata_source = Column(String(50))  # pubmed, crossref, merged
+    doi_validado = Column(Boolean, default=False)  # DOI verificado via doi.org
+    
     # Análisis IA
     veredicto_ia = Column(String(100)) # "Aprobado", "Evidencia Baja", etc.
     resumen_slide = Column(Text)  # Frase para diapositiva
@@ -90,6 +102,18 @@ class Paper(Base):
             "poblacion": self.poblacion,
             "impact_factor": self.impact_factor,
             "fecha_publicacion_exacta": self.fecha_publicacion_exacta,
+            # Metadatos Multi-Fuente
+            "pmid": self.pmid,
+            "mesh_terms": self.mesh_terms or [],
+            "abstract_estructurado": self.abstract_estructurado or {},
+            "affiliaciones": self.affiliaciones or [],
+            "funders": self.funders or [],
+            "license": self.license,
+            "referencias": self.referencias or [],
+            "crossmark_status": self.crossmark_status,
+            "metadata_source": self.metadata_source,
+            "doi_validado": self.doi_validado,
+            # Análisis IA
             "veredicto_ia": self.veredicto_ia,
             "resumen_slide": self.resumen_slide,
             "analisis_completo": self.analisis_completo,
@@ -97,10 +121,10 @@ class Paper(Base):
             "thumbnail_path": self.thumbnail_path,
             "imagenes": self.imagenes or [],
             "num_graficos": self.num_graficos,
+            "archivo_path": self.archivo_path,
             "archivo_nombre": self.archivo_nombre,
             "num_paginas": self.num_paginas,
             "fecha_subida": self.fecha_subida.isoformat() if self.fecha_subida else None,
-            "fecha_analisis": self.fecha_analisis.isoformat() if self.fecha_analisis else None,
             "fecha_analisis": self.fecha_analisis.isoformat() if self.fecha_analisis else None,
             "procesado": self.procesado,
             "is_quiz": self.is_quiz,

@@ -215,11 +215,218 @@ def render_card(paper, key_prefix="card"):
 
 # --- VISTAS ---
 
-# 1. VIEW DETALLE (Igual que antes pero limpiaremos esto en otro paso si hace falta)
-# ... CODIGO DETALLE MANTENIDO PORQUE NO ESTOY RE-ESCRIBIENDO EL HEADER, SOLO EL BLOQUE INFERIOR
+# 1. VIEW DETALLE (Prioridad si hay ID seleccionado)
+if st.session_state.current_view == "detail" and st.session_state.selected_paper_id:
+    paper = get_paper_details(st.session_state.selected_paper_id)
+    if paper:
+        # Header
+        c1, c2 = st.columns([1, 10])
+        if c1.button("⬅ Atrás"):
+             st.session_state.current_view = "home"
+             st.session_state.selected_paper_id = None
+             st.rerun()
+        c2.title(paper.get("titulo"))
+        
+        # Technical Info Block
+        st.markdown("---")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("⭐ Calidad", f"{paper.get('score_calidad', 0)}/10")
+        
+        doi = paper.get("doi")
+        if doi:
+            m2.markdown(f"**DOI**\n\n[{doi}](https://doi.org/{doi})")
+        else:
+            m2.metric("DOI", "N/A")
+            
+        m3.markdown(f"**Muestra:** {paper.get('n_muestra', 'N/A')}\n\n**NNT:** {paper.get('nnt', 'N/A')}")
+        
+        revista = paper.get('revista') or "N/A"
+        fecha = paper.get('fecha_publicacion_exacta') or paper.get('año')
+        m4.markdown(f"**Revista:** {revista}\n\n**Fecha:** {fecha}\n\n**Tipo:** {paper.get('tipo_estudio')}")
+        st.markdown("---")
+
+        # Tabs
+        tab1, tab2, tab3 = st.tabs(["📄 Análisis & PDF", "💬 Chat con Paper", "✏️ Metadatos"])
+        
+        with tab1:
+            col_info, col_pdf = st.columns([1, 1])
+            with col_info:
+                st.markdown("### Review Epistemológico")
+                st.write(paper.get("analisis_completo", "Pendiente..."))
+            
+            with col_pdf:
+                fpath = paper.get("archivo_path")
+                if fpath:
+                    p_path = Path(fpath)
+                    fname = p_path.name
+                    
+                    real_file_path = None
+                    if p_path.exists():
+                        real_file_path = p_path
+                    elif (Path("data/uploads") / fname).exists():
+                         real_file_path = Path("data/uploads") / fname
+                    elif (Path("data/uploads_channels") / fname).exists():
+                         real_file_path = Path("data/uploads_channels") / fname
+
+                    if "uploads_channels" in str(fpath):
+                        pdf_url = f"{API_URL}/static/uploads_channels/{fname}"
+                    else:
+                        pdf_url = f"{API_URL}/static/pdfs/{fname}"
+                    
+                    st.markdown(f"### 📑 Documento Original")
+                    
+                    if real_file_path:
+                        try:
+                            with open(real_file_path, "rb") as f:
+                                pdf_bytes = f.read()
+                                st.download_button(
+                                    label="📥 Descargar PDF",
+                                    data=pdf_bytes,
+                                    file_name=fname,
+                                    mime="application/pdf",
+                                    use_container_width=True
+                                )
+                        except Exception as e:
+                            st.error(f"Error leyendo archivo: {e}")
+                    else:
+                        st.warning("⚠️ El archivo PDF no se encuentra.")
+                        
+                    st.markdown(f'<iframe src="{pdf_url}" width="100%" height="600px"></iframe>', unsafe_allow_html=True)
+        
+        with tab2:
+            st.markdown("### 💬 Pregúntale a este Paper")
+            k_chat = f"chat_{paper['id']}"
+            if k_chat not in st.session_state:
+                st.session_state[k_chat] = []
+
+            for msg in st.session_state[k_chat]:
+                with st.chat_message(msg["role"]):
+                    st.write(msg["content"])
+            
+            prompt = st.chat_input("Escribe tu pregunta sobre el estudio...")
+            if prompt:
+                st.session_state[k_chat].append({"role": "user", "content": prompt})
+                with st.chat_message("user"):
+                    st.write(prompt)
+                
+                with st.spinner("Analizando..."):
+                    try:
+                        res = requests.post(f"{API_URL}/papers/chat/{paper['id']}", json={"question": prompt})
+                        ans = res.json().get("answer", "Error")
+                    except Exception as e:
+                        ans = f"Error de conexión: {e}"
+                
+                st.session_state[k_chat].append({"role": "assistant", "content": ans})
+                with st.chat_message("assistant"):
+                    st.write(ans)
+
+        with tab3:
+            st.write("### ✏️ Editar Metadatos")
+            
+            col_form, col_doi = st.columns([1, 1])
+            
+            with col_form:
+                st.markdown("#### Información Básica")
+                new_title = st.text_input("Título", value=paper.get("titulo"))
+                new_autores = st.text_area("Autores (uno por línea)", 
+                    value="\n".join(paper.get("autores", [])) if paper.get("autores") else "")
+                new_year = st.number_input("Año", value=paper.get("año") or 2024, min_value=1900, max_value=2030)
+                new_specialty = st.selectbox("Especialidad", 
+                    ["Cardiología", "UCI", "Infectología", "Neurología", "Neumonía", "ECG", "Otra"],
+                    index=0 if not paper.get("especialidad") else 
+                        (["Cardiología", "UCI", "Infectología", "Neurología", "Neumonía", "ECG", "Otra"].index(paper.get("especialidad")) 
+                         if paper.get("especialidad") in ["Cardiología", "UCI", "Infectología", "Neurología", "Neumonía", "ECG", "Otra"] else 6)
+                )
+                new_tipo = st.selectbox("Tipo de Estudio",
+                    ["RCT", "Systematic Review", "Meta-análisis", "Cohorte", "Caso-Control", "Observacional", "Otro"],
+                    index=0 if not paper.get("tipo_estudio") else
+                        (["RCT", "Systematic Review", "Meta-análisis", "Cohorte", "Caso-Control", "Observacional", "Otro"].index(paper.get("tipo_estudio"))
+                         if paper.get("tipo_estudio") in ["RCT", "Systematic Review", "Meta-análisis", "Cohorte", "Caso-Control", "Observacional", "Otro"] else 6)
+                )
+                
+                if st.button("💾 Guardar Cambios", use_container_width=True, type="primary"):
+                    updates = {
+                        "titulo": new_title,
+                        "autores": [a.strip() for a in new_autores.split("\n") if a.strip()],
+                        "año": int(new_year),
+                        "especialidad": new_specialty,
+                        "tipo_estudio": new_tipo
+                    }
+                    try:
+                        requests.put(f"{API_URL}/papers/{paper['id']}", json=updates)
+                        st.success("✅ Metadatos guardados correctamente!")
+                        time.sleep(0.5)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+            
+            with col_doi:
+                st.markdown("#### 🔗 Actualizar DOI y Metadatos")
+                
+                current_doi = paper.get("doi", "")
+                doi_status = "✅ Validado" if paper.get("doi_validado") else "⚠️ No validado"
+                metadata_source = paper.get("metadata_source", "Sin enriquecer")
+                
+                st.info(f"""
+                **DOI actual:** {current_doi or 'No disponible'}  
+                **Estado:** {doi_status}  
+                **Fuente metadatos:** {metadata_source}
+                """)
+                
+                new_doi = st.text_input("Nuevo DOI (opcional)", 
+                    value=current_doi,
+                    placeholder="10.1000/ejemplo",
+                    help="Ingrese un DOI para actualizar o deje el existente para solo enriquecer")
+                
+                st.markdown("---")
+                st.markdown("**Datos que se actualizarán:**")
+                st.caption("• Título, autores, revista, año")
+                st.caption("• Abstract estructurado (si está disponible)")
+                st.caption("• Términos MeSH, afiliaciones")
+                st.caption("• Financiadores, licencia, referencias")
+                st.caption("• Estado CrossMark (retractado, actualizado)")
+                
+                if st.button("🔄 Actualizar desde DOI", use_container_width=True, type="secondary"):
+                    with st.spinner("Consultando PubMed y CrossRef..."):
+                        try:
+                            payload = {"doi": new_doi} if new_doi else {}
+                            res = requests.post(
+                                f"{API_URL}/papers/{paper['id']}/enrich-doi", 
+                                json=payload,
+                                timeout=30
+                            )
+                            if res.status_code == 200:
+                                data = res.json()
+                                st.success(f"✅ {data.get('mensaje', 'Actualizado')}")
+                                if data.get("campos_actualizados"):
+                                    st.info(f"Campos actualizados: {', '.join(data['campos_actualizados'])}")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                error_detail = res.json().get("detail", res.text)
+                                st.error(f"❌ Error: {error_detail}")
+                        except requests.exceptions.Timeout:
+                            st.error("⏱️ Tiempo de espera agotado. Intente nuevamente.")
+                        except Exception as e:
+                            st.error(f"❌ Error de conexión: {e}")
+                
+                # Mostrar metadatos enriquecidos si existen
+                if paper.get("mesh_terms"):
+                    with st.expander("🏷️ Términos MeSH"):
+                        for term in paper.get("mesh_terms", []):
+                            st.caption(f"• {term}")
+                
+                if paper.get("funders"):
+                    with st.expander("💰 Financiadores"):
+                        for funder in paper.get("funders", []):
+                            st.caption(f"• {funder.get('nombre', 'Desconocido')}")
+
+
+    else:
+        st.error("Paper no encontrado")
 
 # 2. VIEW HOME (Swimlanes)
-if st.session_state.current_view == "home":
+elif st.session_state.current_view == "home":
     # Cargar Stats
     try:
         stats = requests.get(f"{API_URL}/papers/stats").json()

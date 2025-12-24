@@ -28,7 +28,13 @@ async def scheduled_scan():
 async def lifespan(app: FastAPI):
     # Startup
     print("🚀 Iniciando Scheduler...")
-    scheduler.add_job(scheduled_scan, 'interval', hours=6) # Cada 6 horas
+    
+    # Ejecutar escaneo inmediatamente al iniciar
+    import asyncio
+    asyncio.create_task(scheduled_scan())
+    
+    # Programar escaneo cada 12 horas
+    scheduler.add_job(scheduled_scan, 'interval', hours=12)
     scheduler.start()
     yield
     # Shutdown
