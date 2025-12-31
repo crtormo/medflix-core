@@ -83,6 +83,28 @@ class Paper(Base):
     # Estado
     procesado = Column(Boolean, default=False)
     
+    # Categorización (Nuevo)
+    # papers = estudios con DOI, libros = libros médicos, ekg_dojo = quizzes ECG, sin_categorizar = resto
+    categoria = Column(String(50), default='sin_categorizar', index=True)
+    
+    # Soft Delete
+    deleted = Column(Boolean, default=False, index=True)
+    deleted_at = Column(DateTime, nullable=True)
+    
+    # Metadatos de Libros (OpenLibrary/Google Books)
+    isbn = Column(String(20), index=True)  # ISBN-10 o ISBN-13
+    editorial = Column(String(200))  # Publisher
+    edicion = Column(String(100))  # "5ta Edición"
+    cover_url = Column(String(500))  # URL portada OpenLibrary/Google Books
+    cover_path = Column(String(500))  # Portada descargada localmente
+    descripcion_libro = Column(Text)  # Sinopsis/descripción
+    idioma = Column(String(20))  # es, en, pt
+    open_library_id = Column(String(50))  # OL12345W
+    
+    # Modo Guardia (UCI/ER)
+    clinical_insights = Column(JSONB, default=dict) # {bottom_line, key_dosages, safety_warnings, grade}
+
+    
     def to_dict(self):
         """Convierte el modelo a diccionario para APIs."""
         return {
@@ -128,8 +150,24 @@ class Paper(Base):
             "fecha_analisis": self.fecha_analisis.isoformat() if self.fecha_analisis else None,
             "procesado": self.procesado,
             "is_quiz": self.is_quiz,
-            "quiz_data": self.quiz_data or {}
+            "quiz_data": self.quiz_data or {},
+            # Campos de categorización
+            "categoria": self.categoria,
+            "deleted": self.deleted,
+            "deleted_at": self.deleted_at.isoformat() if self.deleted_at else None,
+            # Campos de libros
+            "isbn": self.isbn,
+            "editorial": self.editorial,
+            "edicion": self.edicion,
+            "cover_url": self.cover_url,
+            "cover_path": self.cover_path,
+            "descripcion_libro": self.descripcion_libro,
+            "idioma": self.idioma,
+            "open_library_id": self.open_library_id,
+            "clinical_insights": self.clinical_insights or {}
         }
+
+
     
     def to_card_dict(self):
         """Versión reducida para tarjetas del catálogo Netflix."""
@@ -143,7 +181,10 @@ class Paper(Base):
             "n_muestra": self.n_muestra,
             "score_calidad": self.score_calidad,
             "thumbnail_path": self.thumbnail_path,
-            "resumen_slide": self.resumen_slide
+            "cover_path": self.cover_path,
+            "resumen_slide": self.resumen_slide,
+            "categoria": self.categoria,
+            "clinical_insights": self.clinical_insights or {}
         }
 
 

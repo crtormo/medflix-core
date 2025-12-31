@@ -4,6 +4,7 @@ from .visual_analysis import VisualAnalysisService
 from services.groq_service import GroqService
 from services.vector_store import VectorStoreService
 from services.database import get_db_service
+from services.notification_service import NotificationService
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import logging
@@ -20,6 +21,7 @@ class AnalysisCore:
         self.ingestion = ingestion_service or IngestionService()
         self.vector_store = vector_store_service or VectorStoreService()
         self.db_service = get_db_service()  # Servicio PostgreSQL
+        self.notifier = NotificationService()
         
         if groq_service:
             self.groq = groq_service
@@ -64,19 +66,56 @@ class AnalysisCore:
             num_paginas=doc_data['page_count']
         )
         
-        # 4. Análisis IA
+        # 4. Determinación de Categoría TEMPRANA (antes de IA)
+        categoria = 'sin_categorizar'
+        doi = doc_data.get('doi')
+        if doi and len(doi) > 5:
+            categoria = 'papers'
+        elif doc_data['page_count'] > 50:
+            # Check keywords in title
+            titulo_lower = (doc_data['title'] or doc_data['file_name'] or '').lower()
+            libro_keywords = ['textbook', 'libro', 'manual', 'handbook', 'guía', 'atlas', 'compendio', 'tratado']
+            if any(kw in titulo_lower for kw in libro_keywords) or doc_data['page_count'] > 200:
+                categoria = 'libros'
+
+        # 5. Análisis IA Diferencial
         analysis_result = ""
         snippets = {}
+        clinical_insights = {}
         graphs_analysis: List[Dict] = []
         
         if self.groq:
-            # Auditoría Epistemológica (Ahora retorna JSON)
-            audit_data = self.groq.epistemological_audit(doc_data['content'])
-            analysis_result = audit_data.get("analisis_critico", "Error en análisis")
-            veredicto = audit_data.get("veredicto_breve", "")
-            
-            # Snippets enriquecidos (JSON estructurado)
-            snippets = self.groq.generate_snippets(doc_data['content'])
+            if categoria == 'libros':
+                logger.info(f"📚 Procesando como LIBRO: {path.name}")
+                analysis_result = self.groq.book_analysis(doc_data['content'])
+                snippets = self.groq.generate_book_metadata(doc_data['content'])
+                # Mapear snippets de libro a campos generales
+                snippets['summary_slide'] = snippets.get('summary_short')
+                snippets['quality_score'] = 9.0 # Default para libros detectados
+                snippets['study_type'] = "Libro / Manual"
+            else:
+                logger.info(f"📄 Procesando como PAPER: {path.name}")
+                # Auditoría Epistemológica (retorna string markdown)
+                analysis_result = self.groq.epistemological_audit(doc_data['content'])
+                # Snippets enriquecidos (JSON estructurado)
+                snippets = self.groq.generate_snippets(doc_data['content'])
+                # Clinical Insights para Modo Guardia (Nuevo)
+                logger.info(f"⚡ Generando Clinical Insights para Modo Guardia: {path.name}")
+                clinical_insights = self.groq.generate_clinical_insights(doc_data['content'])
+                
+                # Fase 2: GPC y Calculadoras
+                is_gpc = any(kw in (doc_data['title'] or "").lower() for kw in ["guía", "guia", "guideline", "consens"]) or \
+                         snippets.get('study_type', '').lower() in ["guía", "guideline"]
+                
+                if is_gpc:
+                    logger.info(f"📜 Detectada GPC: {path.name}")
+                    clinical_insights['gpc_recommendations'] = self.groq.extract_gpc_recommendations(doc_data['content'])
+                    categoria = 'papers' # Mantener en papers pero con flag GPC? O nueva categoria 'guias'
+                
+                clinical_insights['suggested_calculators'] = self.groq.suggest_calculators(doc_data['content'])
+
+            veredicto = "" # Se extrae del markdown si es necesario
+
             
             # ENRIQUECIMIENTO CON DOI (Nuevo Fase 7)
             doi = doc_data.get('doi')
@@ -167,31 +206,54 @@ class AnalysisCore:
                 except Exception as e:
                     logger.error(f"Error en análisis visual / EKG: {e}")
         
+        # (Categoría determinada arriba, pero validamos si cambió con los snippets)
+        if categoria == 'sin_categorizar' and snippets.get('study_type'):
+            stp = snippets['study_type'].lower()
+            if any(kw in stp for kw in ['libro', 'manual', 'guía', 'textbook']):
+                categoria = 'libros'
+            elif any(kw in stp for kw in ['rct', 'meta-análisis', 'estudio', 'ensayo']):
+                categoria = 'papers'
+        
         # 6. Actualizar DB con resultados completos
+
         # Preparar datos de update incluyendo enriquecidos
         paper_updated = self.db_service.mark_as_processed(
             str(paper.id),
             analysis_data={
                 "analisis_completo": analysis_result,
                 "resumen_slide": snippets.get('summary_slide'),
-                "score_calidad": audit_data.get("score_calidad") or snippets.get('quality_score'), # Priorizar deep model
+                "score_calidad": snippets.get('quality_score'),
                 "tipo_estudio": snippets.get('study_type'),
                 "especialidad": snippets.get('specialty') or snippets.get('study_type'),
                 "n_muestra": snippets.get('n_study'),
                 "nnt": snippets.get('nnt'),
                 "num_graficos": len(graphs_analysis),
                 "analisis_graficos": graphs_analysis,
-                # Campos adicionales
                 "tags": snippets.get('tags'),
                 "poblacion": snippets.get('population'),
                 "año": final_ano,
-                # Campos Nuevos
-                "revista": enriched_meta.get('revista'),
+                "revista": enriched_meta.get('revista') or snippets.get('editorial'),
                 "fecha_publicacion_exacta": enriched_meta.get('fecha_publicacion'),
                 "veredicto_ia": veredicto,
-                "abstract": enriched_meta.get('abstract')
+                "abstract": enriched_meta.get('abstract') or snippets.get('summary_short'),
+                # Categoría automática e info de libros
+                "categoria": categoria,
+                "isbn": snippets.get('isbn'),
+                "editorial": snippets.get('editorial'),
+                "edicion": snippets.get('edicion'),
+                "descripcion_libro": snippets.get('summary_short'),
+                "clinical_insights": clinical_insights
             }
         )
+        
+        # --- Alerta Proactiva (Fase 4) ---
+        if paper_updated and paper_updated.score_calidad and paper_updated.score_calidad > 9.0:
+            if categoria != 'libros': # Solo alertar papers de alta calidad
+                try:
+                    self.notifier.send_practice_changing_alert(paper_updated)
+                except Exception as e:
+                    logger.error(f"Error disparando alerta: {e}")
+
         
         # Update Quiz Data
         if is_quiz:

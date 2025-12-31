@@ -16,12 +16,16 @@ async def list_papers(
     offset: int = 0,
     specialty: Optional[str] = None,
     sort: Optional[str] = "recent",
-    is_quiz: bool = False
+    is_quiz: bool = False,
+    categoria: Optional[str] = None,
+    include_deleted: bool = False
 ):
-    """Lista papers para el catálogo."""
+    """Lista papers para el catálogo. Filtra por categoría si se especifica."""
     db = get_db_service()
     
-    if is_quiz:
+    if categoria:
+        papers = db.get_papers_by_categoria(categoria, limit, include_deleted)
+    elif is_quiz:
         papers = db.get_quiz_papers(limit)
     elif specialty and specialty != "Todas":
         papers = db.get_papers_by_especialidad(specialty, limit)
@@ -31,11 +35,24 @@ async def list_papers(
         papers = db.get_recent_papers(limit)
         
     return [p.to_card_dict() for p in papers]
+
 # --- Endpoints Estáticos (ANTES de rutas dinámicas) ---
 
 @router.get("/stats", tags=["stats"])
 async def get_stats():
     return get_db_service().get_stats()
+
+@router.get("/especialidades", tags=["stats"])
+async def get_especialidades():
+    """Retorna lista única de especialidades en la DB."""
+    return get_db_service().get_all_especialidades()
+
+@router.get("/search", tags=["search"])
+async def search_papers(q: str, limit: int = 20):
+    """Busca papers por título, autores o tags (SQL ILIKE)."""
+    db = get_db_service()
+    papers = db.search_papers(q, limit)
+    return [p.to_card_dict() for p in papers]
 
 @router.get("/query", tags=["search"])
 def query_papers(q: str):
@@ -62,7 +79,62 @@ def generate_citation(doc_id: str, style: str = "vancouver"):
         "cita": citation
     }
 
-# --- Endpoints Dinámicos (DESPUÉS de rutas estáticas) ---
+# --- Endpoints de Gestión ---
+
+@router.get("/deleted", response_model=List[Dict], tags=["management"])
+async def list_deleted_papers(limit: int = 50):
+    """Lista papers eliminados (soft delete)."""
+    db = get_db_service()
+    papers = db.get_deleted_papers(limit)
+    return [p.to_card_dict() for p in papers]
+
+@router.delete("/{paper_id}", tags=["management"])
+async def soft_delete_paper(paper_id: str):
+    """Marca un paper como eliminado (soft delete). No se volverá a descargar."""
+    db = get_db_service()
+    success = db.soft_delete_paper(paper_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Paper no encontrado")
+    return {"success": True, "message": "Paper marcado como eliminado"}
+
+@router.put("/{paper_id}/restore", tags=["management"])
+async def restore_paper(paper_id: str):
+    """Restaura un paper eliminado."""
+    db = get_db_service()
+    success = db.restore_paper(paper_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Paper no encontrado")
+    return {"success": True, "message": "Paper restaurado"}
+
+@router.put("/{paper_id}/categoria", tags=["management"])
+async def change_paper_categoria(paper_id: str, payload: Dict):
+    """Cambia la categoría de un paper. Payload: {"categoria": "papers|libros|ekg_dojo|sin_categorizar"}"""
+    nueva_categoria = payload.get("categoria")
+    if not nueva_categoria:
+        raise HTTPException(status_code=400, detail="Falta el campo 'categoria'")
+    
+    db = get_db_service()
+    paper = db.change_categoria(paper_id, nueva_categoria)
+    if not paper:
+        raise HTTPException(status_code=400, detail="Categoría inválida o paper no encontrado")
+    return {"success": True, "message": f"Categoría cambiada a {nueva_categoria}", "paper": paper.to_dict()}
+
+@router.delete("/{paper_id}/permanent", tags=["management"])
+async def permanent_delete_paper(paper_id: str):
+    """Elimina permanentemente un paper de la base de datos."""
+    db = get_db_service()
+    success = db.delete_paper(paper_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Paper no encontrado")
+    return {"success": True, "message": "Paper eliminado permanentemente"}
+
+
+# --- Endpoints de Metadatos (Específicos) ---
+
+# (Rutas de enriquecimiento movidas arriba)
+
+
+# --- Endpoints Dinámicos (DESPUÉS de rutas estáticas/específicas) ---
 
 @router.get("/{paper_id}", response_model=Dict)
 def get_paper_details(paper_id: str):
@@ -72,6 +144,7 @@ def get_paper_details(paper_id: str):
     if not paper:
         raise HTTPException(status_code=404, detail="Paper no encontrado")
     return paper.to_dict()
+
 
 @router.put("/{paper_id}")
 async def update_paper_metadata(paper_id: str, updates: Dict):
@@ -186,13 +259,128 @@ async def enrich_paper_doi(paper_id: str, payload: Optional[Dict] = None):
             "campos_actualizados": list(update_fields.keys()),
             "paper": updated_paper.to_dict()
         }
-    else:
         return {
             "success": True,
             "mensaje": "No se encontraron campos nuevos para actualizar",
             "campos_actualizados": [],
             "paper": paper.to_dict()
         }
+
+
+@router.put("/{paper_id}/enrich-book", tags=["metadata"])
+async def enrich_book_metadata(paper_id: str, payload: Optional[Dict] = None):
+    """
+    Enriquece metadatos de un libro usando ISBN o título.
+    Payload: {"isbn": "9780323341905"} o vacío para auto-detectar.
+    """
+    from app.dependencies import book_enricher
+    db = get_db_service()
+    paper = db.get_paper_by_id(paper_id)
+    
+    if not paper:
+        raise HTTPException(status_code=404, detail="Libro no encontrado")
+    
+    # Intentar obtener ISBN: payload -> DB -> auto-detectar
+    isbn = None
+    if payload and payload.get("isbn"):
+        isbn = payload["isbn"]
+    elif paper.isbn:
+        isbn = paper.isbn
+    else:
+        # Auto-detectar de titulo o contenido
+        isbn = book_enricher.extract_isbn_from_text(paper.titulo)
+        if not isbn and paper.abstract:
+            isbn = book_enricher.extract_isbn_from_text(paper.abstract)
+            
+    enriched_data = None
+    if not isbn:
+        # Fallback: buscar por título
+        title = paper.titulo.replace('.pdf', '').replace('_', ' ')
+        enriched_data = book_enricher.enrich_by_title(title)
+        if not enriched_data or not enriched_data.get('titulo'):
+             raise HTTPException(status_code=400, detail="No se pudo encontrar ISBN ni metadatos por título")
+    else:
+        enriched_data = book_enricher.enrich_by_isbn(isbn)
+        
+    if not enriched_data or not enriched_data.get('titulo'):
+        raise HTTPException(status_code=404, detail="No se encontraron metadatos satisfactorios")
+    
+    # Mapear y actualizar
+    update_fields = {
+        "isbn": enriched_data.get("isbn") or isbn,
+        "editorial": enriched_data.get("editorial"),
+        "edicion": enriched_data.get("edicion"),
+        "cover_url": enriched_data.get("cover_url"),
+        "descripcion_libro": enriched_data.get("descripcion_libro") or enriched_data.get("descripcion"),
+        "idioma": enriched_data.get("idioma"),
+        "open_library_id": enriched_data.get("open_library_id"),
+        "año": enriched_data.get("año") or paper.año,
+        "num_paginas": enriched_data.get("num_paginas") or paper.num_paginas
+    }
+    
+    # Autores si no tiene o son pocos
+    if enriched_data.get("autores") and (not paper.autores or len(paper.autores) == 0):
+        update_fields["autores"] = enriched_data["autores"]
+    
+    # Descargar portada localmente si hay URL
+    if enriched_data.get("isbn") and enriched_data.get("cover_url"):
+        cover_path = book_enricher._download_cover(enriched_data['isbn'], enriched_data['cover_url'])
+        if cover_path:
+            update_fields["cover_path"] = str(cover_path)
+    
+    # Título más limpio si el actual parece nombre de archivo
+    if paper.titulo and ('.pdf' in paper.titulo.lower() or '_' in paper.titulo or len(paper.titulo) < 5):
+        update_fields["titulo"] = enriched_data["titulo"]
+
+    updated_paper = db.update_paper(paper_id, **update_fields)
+    if not updated_paper:
+        raise HTTPException(status_code=500, detail="Error actualizando libro en DB")
+        
+    return {
+        "success": True,
+        "message": f"Metadatos de libro actualizados desde {enriched_data.get('metadata_source', 'fuente externa')}",
+        "paper": updated_paper.to_dict()
+    }
+@router.post("/{paper_id}/clinical-insights", tags=["analysis"])
+async def generate_clinical_insights(paper_id: str):
+    """
+    Genera Insights Clínicos (Modo Guardia) para un paper existente.
+    """
+    from app.dependencies import analysis_core
+    db = get_db_service()
+    paper = db.get_paper_by_id(paper_id)
+    
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper no encontrado")
+    
+    # Obtener contenido del vector store o archivo
+    content = ""
+    try:
+        # Intentar obtener de ChromaDB primero
+        v_doc = analysis_core.vector_store.collection.get(ids=[paper_id])
+        if v_doc['documents']:
+            content = v_doc['documents'][0]
+    except:
+        pass
+        
+    if not content and paper.archivo_path:
+        # Fallback: Extraer de PDF de nuevo
+        doc_data = analysis_core.ingestion.process_pdf(Path(paper.archivo_path))
+        content = doc_data['content']
+        
+    if not content:
+        raise HTTPException(status_code=400, detail="No se pudo recuperar el contenido del documento")
+    
+    # Generar insights
+    insights = analysis_core.groq.generate_clinical_insights(content)
+    
+    # Actualizar DB
+    updated_paper = db.update_paper(paper_id, clinical_insights=insights)
+    
+    return {
+        "success": True,
+        "clinical_insights": insights
+    }
 
 # --- Endpoints de Chat & RAG ---
 # (Nota: main.py original los tenía en raiz /chat/{paper_id}, ahora los movemos a child de router o mantenemos)

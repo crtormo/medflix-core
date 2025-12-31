@@ -63,6 +63,12 @@ async def lifespan(app: FastAPI):
     # Startup
     print("🚀 Iniciando Scheduler...")
     
+    # Imprimir rutas registradas para debug
+    print("🛣️ Rutas registradas:")
+    for route in app.routes:
+        if hasattr(route, "path"):
+            print(f"  - {route.path}")
+    
     # Ejecutar escaneo inmediatamente al iniciar
     import asyncio
     asyncio.create_task(scheduled_scan())

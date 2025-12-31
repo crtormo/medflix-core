@@ -50,8 +50,16 @@ class ChannelIngestor:
         last_id = channel_data.last_scanned_id
         channel_pk = str(channel_data.id)
         
+        # Detectar si es un canal de ECG (para EKG Dojo exclusivamente)
+        ECG_CHANNELS = ['@dailycardiology', '@ecgcases', '@ECG_Quiz', '@Cardiology', '@DrNajeebNotes']
+        is_ecg_channel = channel_username in ECG_CHANNELS
+        
+        if is_ecg_channel:
+            logger.info(f"🥋 Canal ECG detectado: {channel_username} - Solo se procesan imágenes para EKG Dojo")
+        
         limit_str = "Infinito" if limit is None else str(limit)
         logger.info(f"📥 Escaneando canal: {channel_username} (Last ID: {last_id}). Límite: {limit_str}")
+
         
         count = 0
         processed = 0
@@ -75,54 +83,44 @@ class ChannelIngestor:
                 if message.id > max_id_seen:
                     max_id_seen = message.id
                 
-                # Determinar si es PDF o Imagen (para canales ECG)
+                # Determinar si es PDF o Imagen
                 is_pdf = message.document and message.file.mime_type == 'application/pdf'
                 is_image = message.photo or (message.document and message.file.mime_type and message.file.mime_type.startswith('image/'))
                 
                 target_file = None
+                process_as_quiz = False  # Flag para marcar como EKG Dojo
                 
-                if is_pdf:
-                    file_name = message.file.name or f"doc_{message.id}.pdf"
-                    target_file = DOWNLOAD_DIR / file_name
-                elif is_image:
-                    # Solo procesar imágenes si parece ser un canal clínico/ECG (para no bajar memes)
-                    # O simplemente bajamos todo de los canales monitoreados.
-                    # Vamos a bajar todo y convertir.
-                    file_name = f"img_{message.id}.jpg"
-                    original_img_path = DOWNLOAD_DIR / file_name
-                    target_file = DOWNLOAD_DIR / f"ecg_case_{message.id}.pdf"
+                # LÓGICA DE SEPARACIÓN:
+                # - Canales ECG: SOLO procesan imágenes para EKG Dojo
+                # - Canales PDF: SOLO procesan PDFs para catálogo general
+                
+                if is_ecg_channel:
+                    # Canal ECG: solo imágenes, ignorar PDFs
+                    if is_image:
+                        file_name = f"ekg_dojo_{message.id}.jpg"
+                        original_img_path = DOWNLOAD_DIR / file_name
+                        target_file = original_img_path  # NO convertir a PDF para EKG
+                        process_as_quiz = True
+                    elif is_pdf:
+                        # Ignorar PDFs de canales ECG
+                        continue
+                else:
+                    # Canal normal: solo PDFs, ignorar imágenes
+                    if is_pdf:
+                        file_name = message.file.name or f"doc_{message.id}.pdf"
+                        target_file = DOWNLOAD_DIR / file_name
+                    elif is_image:
+                        # Ignorar imágenes de canales no-ECG
+                        continue
+
                 
                 if target_file:
                     
-                    # Descargar (PDF directo o Imagen->PDF)
+                    # Descargar archivo
                     if not target_file.exists():
                         scan_status.log(f"📥 Detectado contenido: {message.id}...")
                         try:
-                            if is_pdf:
-                                await message.download_media(file=target_file)
-                            elif is_image:
-                                # Descargar imagen temporalmente
-                                if not original_img_path.exists():
-                                    await message.download_media(file=original_img_path)
-                                
-                                # Convertir a PDF
-                                if original_img_path.exists() and original_img_path.stat().st_size > 0:
-                                    try:
-                                        import img2pdf
-                                        with open(target_file, "wb") as f:
-                                            f.write(img2pdf.convert(str(original_img_path)))
-                                        # Eliminar imagen original para ahorrar espacio
-                                        original_img_path.unlink()
-                                        scan_status.log(f"🖼️ Convertido a PDF: {target_file.name}")
-                                    except ImportError:
-                                        # Fallback si no hay img2pdf, usar PIL
-                                        from PIL import Image
-                                        image = Image.open(original_img_path)
-                                        pdf_bytes = image.convert('RGB')
-                                        pdf_bytes.save(target_file)
-                                        original_img_path.unlink()
-                                    except Exception as e:
-                                        logger.error(f"Error conversión img->pdf: {e}")
+                            await message.download_media(file=target_file)
                             
                             # Validar descarga
                             if target_file.exists() and target_file.stat().st_size == 0:
@@ -144,13 +142,30 @@ class ChannelIngestor:
                     # PROCESAR CON MEDFLIX CORE
                     if self.core:
                         try:
-                            # Ejecutar en thread pool 
                             loop = asyncio.get_running_loop()
-                            result = await loop.run_in_executor(
-                                None, 
-                                self.core.process_and_analyze, 
-                                str(target_file)
-                            )
+                            
+                            if process_as_quiz:
+                                # Procesar imagen ECG directamente como quiz
+                                logger.info(f"🥋 Procesando EKG Dojo: {file_name}")
+                                result = await loop.run_in_executor(
+                                    None,
+                                    self._process_ecg_quiz,
+                                    str(target_file),
+                                    channel_username
+                                )
+                            else:
+                                # Procesar PDF normal al catálogo
+                                result = await loop.run_in_executor(
+                                    None, 
+                                    self.core.process_and_analyze, 
+                                    str(target_file)
+                                )
+                            
+                            # Validar que result sea un dict
+                            if not isinstance(result, dict):
+                                logger.warning(f"⚠️ Resultado inesperado (no dict): {type(result)}")
+                                scan_status.status["stats"]["errores"] += 1
+                                continue
                             
                             status = result.get('status')
                             if status == 'success':
@@ -158,7 +173,6 @@ class ChannelIngestor:
                                 processed += 1
                                 scan_status.status["stats"]["nuevos_descargados"] += 1
                             elif status == 'duplicate':
-                                 # existing_count += 1 # Opcional contar
                                  scan_status.status["stats"]["duplicados"] += 1
                             else:
                                 logger.warning(f"❌ Falló análisis: {result}")
@@ -172,6 +186,8 @@ class ChannelIngestor:
             
             # Al finalizar bucle exitosamente
             logger.info(f"🏁 {channel_username} escaneado correctamente.")
+
+
 
         except FloodWaitError as e:
             logger.critical(f"🚨 FloodWait Global en canal {channel_username}: {e.seconds}s")
@@ -190,7 +206,66 @@ class ChannelIngestor:
                     
         logger.info(f"📊 Resumen {channel_username}: Nuevos {processed} | Descargas {count} | Errores {scan_status.status['stats']['errores']}")
 
+    def _process_ecg_quiz(self, image_path: str, channel_username: str) -> dict:
+        """
+        Procesa una imagen de ECG para EKG Dojo.
+        Crea un quiz a partir de la imagen usando Groq Vision.
+        """
+        import hashlib
+        import base64
+        from pathlib import Path
+        
+        path = Path(image_path)
+        
+        # Calcular hash de la imagen
+        with open(path, 'rb') as f:
+            img_hash = hashlib.sha256(f.read()).hexdigest()
+        
+        # Verificar duplicado
+        existing = self.db.get_paper_by_hash(img_hash)
+        if existing:
+            return {"status": "duplicate", "reason": "Ya existe en EKG Dojo"}
+        
+        # Crear entrada en DB como quiz
+        paper = self.db.create_paper(
+            hash=img_hash,
+            titulo=f"EKG Challenge - {path.stem}",
+            archivo_path=str(path),
+            archivo_nombre=path.name,
+            thumbnail_path=str(path),  # La imagen es el thumbnail
+            num_paginas=1
+        )
+        
+        # Generar quiz con Groq Vision
+        quiz_data = {}
+        try:
+            if self.core and self.core.groq:
+                with open(path, 'rb') as img_file:
+                    b64_img = base64.b64encode(img_file.read()).decode('utf-8')
+                    data_uri = f"data:image/jpeg;base64,{b64_img}"
+                    quiz_data = self.core.groq.analyze_ekg_challenge(data_uri)
+        except Exception as e:
+            logger.error(f"Error generando quiz ECG: {e}")
+            quiz_data = {"error": str(e)}
+        
+        # Marcar como procesado y quiz
+        self.db.update_paper(
+            str(paper.id),
+            is_quiz=True,
+            quiz_data=quiz_data,
+            procesado=True,
+            especialidad="EKG Dojo",
+            tipo_estudio="Quiz ECG"
+        )
+        
+        return {
+            "status": "success",
+            "doc_id": str(paper.id),
+            "quiz_data": quiz_data
+        }
+
     async def run_all(self):
+
         """Escanea todos los canales activos de la base de datos"""
         from services.scan_status import scan_status
         

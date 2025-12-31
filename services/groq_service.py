@@ -139,6 +139,29 @@ class GroqService:
         
         return self.analyze_text(text="", prompt_template=prompt)
 
+    def book_analysis(self, text: str) -> str:
+        """
+        Realiza un resumen y análisis de libro médico.
+        """
+        truncated_text = text[:15000]
+        prompt = f"""
+        Actúa como un bibliotecario médico senior y experto en educación médica. 
+        Analiza el siguiente texto que pertenece a un LIBRO MÉDICO.
+        Tu salida debe ser estrictamente en formato MARKDOWN y en ESPAÑOL.
+        
+        Texto del libro:
+        {truncated_text}
+        
+        Proporciona:
+        1. **Resumen General**: ¿De qué trata el libro y a quién va dirigido?
+        2. **Estructura y Contenido**: Breve descripción de los temas cubiertos.
+        3. **Utilidad Clínica/Educativa**: ¿Cómo ayuda este libro a un profesional o estudiante?
+        4. **Nivel de Dificultad**: Básico, Intermedio, Avanzado.
+        
+        Al final, proporciona un veredicto de una frase: "Referencia esencial", "Manual práctico", "Texto introductorio", etc.
+        """
+        return self.analyze_text(text="", prompt_template=prompt)
+
     def analyze_image_url(self, image_url: str, context: str = "") -> str:
         """
         Analiza una imagen (pasada como URL o base64 data URI).
@@ -262,3 +285,118 @@ class GroqService:
         except Exception as e:
              return {"error": f"Error generando snippets (tras retries): {str(e)}"}
 
+    def generate_book_metadata(self, text: str) -> Dict:
+        """Extrae metadatos específicos de libros médicos."""
+        truncated_text = text[:12000]
+        prompt = f"""
+        Extrae metadatos de este LIBRO MÉDICO en formato JSON válido.
+        Asegúrate de que los valores de texto estén en ESPAÑOL.
+        
+        {{
+            "titulo": "Título oficial del libro",
+            "autores": ["Autor 1", "Autor 2"],
+            "editorial": "Nombre de la editorial",
+            "especialidad": "Especialidad médica principal",
+            "isbn": "ISBN-13 o ISBN-10 si se encuentra",
+            "año": 2024,
+            "edicion": "Ej: 5ta Edición",
+            "summary_short": "Resumen de una frase para catálogo (max 20 palabras)",
+            "tags": ["tag1", "tag2"],
+            "idioma": "es",
+            "suggested_filename": "Libro_Titulo_Ano (usar guiones bajos, sin espacios, sin caracteres especiales, max 50 chars)"
+        }}
+        
+        Texto del libro:
+        {truncated_text}
+        """
+        try:
+            response = self._make_completion_request(
+                model=self.fast_model,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"}
+            )
+            return json.loads(response.choices[0].message.content)
+        except Exception as e:
+            return {"error": str(e)}
+
+    def generate_clinical_insights(self, text: str) -> Dict:
+        """
+        Extrae información crítica para decisiones clínicas rápidas (Modo Guardia).
+        Enfocado en UCI y Emergencias.
+        """
+        truncated_text = text[:15000]
+        prompt = f"""
+        Eres un intensivista senior con 20 años de experiencia en UCI. 
+        Analiza el siguiente texto médico para extraer información CRÍTICA de soporte vital.
+        Tu salida debe ser ESTRICTAMENTE un JSON válido en ESPAÑOL.
+        
+        {{
+            "bottom_line": "La conclusión central para la práctica en una frase contundente",
+            "key_dosages": ["Dosis A (ej: 0.1 mcg/kg/min)", "Dosis B"],
+            "safety_warnings": ["Advertencia de seguridad 1", "Contraindicación 2"],
+            "grade": "Nivel de evidencia (A, B, C, o D)",
+            "safety_disclaimer": "Verificar con protocolo institucional. Sugerencia por IA."
+        }}
+        
+        Texto:
+        {truncated_text}
+        """
+        try:
+            response = self._make_completion_request(
+                model=self.fast_model,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"}
+            )
+            return json.loads(response.choices[0].message.content)
+        except Exception as e:
+            return {"error": str(e), "bottom_line": "No se pudieron extraer insights clínicos."}
+
+    def extract_gpc_recommendations(self, text: str) -> Dict:
+        """
+        Extrae recomendaciones específicas de una Guía de Práctica Clínica.
+        """
+        truncated_text = text[:15000]
+        prompt = f"""
+        Analiza esta Guía de Práctica Clínica (GPC) y extrae las recomendaciones más fuertes ( Clase I y IIa).
+        Tu salida debe ser ESTRICTAMENTE un JSON válido en ESPAÑOL.
+        
+        {{
+            "clase_i": ["Recomendación 1", "Recomendación 2"],
+            "clase_iia": ["Recomendación A"],
+            "contraindicaciones_iii": ["Lo que NO se debe hacer"],
+            "puntos_clave": ["Mensaje central 1"]
+        }}
+        
+        Texto:
+        {truncated_text}
+        """
+        try:
+            response = self._make_completion_request(
+                model=self.fast_model,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"}
+            )
+            return json.loads(response.choices[0].message.content)
+        except Exception:
+            return {"clase_i": [], "clase_iia": [], "contraindicaciones_iii": [], "puntos_clave": []}
+
+    def suggest_calculators(self, text: str) -> List[str]:
+        """
+        Sugiere calculadoras médicas relevantes basadas en el texto.
+        """
+        prompt = f"""
+        Identifica qué scores o calculadoras clínicas son relevantes para este texto médico.
+        Responde SÓLO con una lista de nombres de calculadoras separadas por comas.
+        Ej: SOFA, Wells, Apache II, CURB-65, HAS-BLED.
+        
+        Texto: {text[:5000]}
+        """
+        try:
+            completion = self._make_completion_request(
+                model=self.fast_model,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            res = completion.choices[0].message.content
+            return [c.strip() for c in res.split(",") if c.strip()]
+        except:
+            return []

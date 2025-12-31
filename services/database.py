@@ -218,6 +218,19 @@ class DatabaseService:
     
     def mark_as_processed(self, paper_id: str, analysis_data: Dict[str, Any]) -> Optional[Paper]:
         """Marca un paper como procesado y guarda el análisis."""
+        # Truncar campos que tienen límites en DB
+        n_muestra = analysis_data.get("n_muestra")
+        if n_muestra and len(str(n_muestra)) > 50:
+            n_muestra = str(n_muestra)[:47] + "..."
+        
+        nnt = analysis_data.get("nnt")
+        if nnt and len(str(nnt)) > 50:
+            nnt = str(nnt)[:47] + "..."
+        
+        tipo_estudio = analysis_data.get("tipo_estudio")
+        if tipo_estudio and len(str(tipo_estudio)) > 100:
+            tipo_estudio = str(tipo_estudio)[:97] + "..."
+        
         return self.update_paper(
             paper_id,
             procesado=True,
@@ -225,19 +238,43 @@ class DatabaseService:
             analisis_completo=analysis_data.get("analisis_completo"),
             resumen_slide=analysis_data.get("resumen_slide"),
             score_calidad=analysis_data.get("score_calidad"),
-            tipo_estudio=analysis_data.get("tipo_estudio"),
+            tipo_estudio=tipo_estudio,
             especialidad=analysis_data.get("especialidad"),
-            n_muestra=analysis_data.get("n_muestra"),
-            nnt=analysis_data.get("nnt"),
+            n_muestra=n_muestra,
+            nnt=nnt,
             imagenes=analysis_data.get("imagenes"),
             num_graficos=analysis_data.get("num_graficos"),
-            analisis_graficos=analysis_data.get("analisis_graficos")
+            analisis_graficos=analysis_data.get("analisis_graficos"),
+            categoria=analysis_data.get("categoria", "sin_categorizar")
         )
+
     
-    # ==================== DELETE ====================
+    # ==================== DELETE & CATEGORÍAS ====================
+    
+    def soft_delete_paper(self, paper_id: str) -> bool:
+        """Marca un paper como eliminado (soft delete). No se vuelve a descargar."""
+        with self.get_session() as session:
+            paper = session.query(Paper).filter(Paper.id == paper_id).first()
+            if not paper:
+                return False
+            paper.deleted = True
+            paper.deleted_at = datetime.utcnow()
+            session.commit()
+            return True
+    
+    def restore_paper(self, paper_id: str) -> bool:
+        """Restaura un paper eliminado."""
+        with self.get_session() as session:
+            paper = session.query(Paper).filter(Paper.id == paper_id).first()
+            if not paper:
+                return False
+            paper.deleted = False
+            paper.deleted_at = None
+            session.commit()
+            return True
     
     def delete_paper(self, paper_id: str) -> bool:
-        """Elimina un paper de la base de datos."""
+        """Elimina permanentemente un paper de la base de datos."""
         with self.get_session() as session:
             paper = session.query(Paper).filter(Paper.id == paper_id).first()
             if not paper:
@@ -245,6 +282,37 @@ class DatabaseService:
             session.delete(paper)
             session.commit()
             return True
+    
+    def change_categoria(self, paper_id: str, nueva_categoria: str) -> Optional[Paper]:
+        """Cambia la categoría de un paper."""
+        valid_categorias = ['papers', 'libros', 'ekg_dojo', 'sin_categorizar']
+        if nueva_categoria not in valid_categorias:
+            return None
+        return self.update_paper(paper_id, categoria=nueva_categoria)
+    
+    def get_papers_by_categoria(self, categoria: str, limit: int = 50, include_deleted: bool = False) -> List[Paper]:
+        """Obtiene papers filtrados por categoría."""
+        with self.get_session() as session:
+            query = session.query(Paper).filter(Paper.categoria == categoria)
+            if not include_deleted:
+                query = query.filter(Paper.deleted == False)
+            papers = query.order_by(desc(Paper.fecha_subida)).limit(limit).all()
+            for paper in papers:
+                session.expunge(paper)
+            return papers
+    
+    def get_deleted_papers(self, limit: int = 50) -> List[Paper]:
+        """Obtiene papers eliminados (soft delete)."""
+        with self.get_session() as session:
+            papers = session.query(Paper)\
+                .filter(Paper.deleted == True)\
+                .order_by(desc(Paper.deleted_at))\
+                .limit(limit)\
+                .all()
+            for paper in papers:
+                session.expunge(paper)
+            return papers
+
     
     # ==================== STATS ====================
     

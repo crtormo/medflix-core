@@ -80,35 +80,61 @@ with st.sidebar:
     if st.button("🏠 Inicio", use_container_width=True):
         st.session_state.current_view = "home"
         st.rerun()
-        
-    if st.button("🔍 Explorar Todo", use_container_width=True):
-        st.session_state.current_view = "browse"
-        st.session_state.browse_filter = {} # Reset
+    
+    st.divider()
+    st.markdown("### 📂 Biblioteca")
+    
+    # Papers (solo con DOI)
+    if st.button("📄 Papers", use_container_width=True):
+        st.session_state.current_view = "categoria_papers"
         st.rerun()
-
-    if st.button("🤖 Canales Telegram", use_container_width=True):
-        st.session_state.current_view = "channels"
+    
+    # Libros de Medicina (por especialidad)
+    if st.button("📚 Libros de Medicina", use_container_width=True):
+        st.session_state.current_view = "categoria_libros"
         st.rerun()
-
+    
+    # EKG Dojo (quizzes ECG)
     if st.button("🥋 EKG Dojo", use_container_width=True):
         st.session_state.current_view = "ekg_dojo"
+        st.rerun()
+
+    # Guías de Práctica Clínica (Nuevo Fase 2)
+    if st.button("📜 Guías (GPC)", use_container_width=True):
+        st.session_state.current_view = "categoria_guias"
+        st.rerun()
+    
+    # Calculadoras (Nuevo Fase 2)
+    if st.button("🧮 Calculadoras", use_container_width=True):
+        st.session_state.current_view = "calculadoras"
+        st.rerun()
+    
+    st.divider()
+    st.markdown("### ⚙️ Gestión")
+    
+    # Sin Categorizar (incluye eliminados como sub-sección)
+    if st.button("❓ Sin Categorizar", use_container_width=True):
+        st.session_state.current_view = "sin_categorizar"
+        st.rerun()
+    
+    # Canales Telegram
+    if st.button("🤖 Canales Telegram", use_container_width=True):
+        st.session_state.current_view = "channels"
         st.rerun()
         
     st.divider()
     
-    # Filtros solo visibles en Browse o Home
-    if st.session_state.current_view in ["browse", "home"]:
-        st.markdown("### Filtros Rápidos")
-        spec = st.selectbox("Especialidad", ["Todas", "Cardiología", "UCI", "Infectología", "Neurología", "Neumonía"])
-        stype = st.selectbox("Tipo Estudio", ["Todos", "RCT", "Systematic Review", "Cohorte"])
-        
-        if st.button("Aplicar Filtros"):
-             st.session_state.current_view = "browse"
-             st.session_state.browse_filter = {"specialty": spec, "type": stype}
-             st.session_state.page = 1
-             st.rerun()
+    # 🔍 BUSCADOR GLOBAL
+    st.markdown("### 🔍 Buscar")
+    search_query = st.text_input("Título, autor o tema...", key="global_search_input")
+    if search_query:
+        if st.button("Buscar en Biblioteca", type="primary", use_container_width=True):
+            st.session_state.current_view = "search_results"
+            st.session_state.search_q = search_query
+            st.rerun()
 
     st.divider()
+
     # Upload Rápido
     with st.expander("📤 Subir Paper"):
         uploaded_file = st.file_uploader("PDF", type="pdf")
@@ -197,9 +223,19 @@ def render_card(paper, key_prefix="card"):
         # Streamlit button es necesario para state.
         # Usaremos diseño standard pero limpio.
         
-        # Imagen
+        # Imagen (Prioridad: Libro -> IA Thumbnail -> Placeholder)
         image_data = "https://via.placeholder.com/300x160/1a1a1a/cccccc?text=Paper"
-        if img_path:
+        
+        # 1. Intentar portada de libro descargada
+        if paper.get("cover_path"):
+            p = Path(paper["cover_path"])
+            if p.exists(): image_data = str(p)
+            elif (Path("data/covers") / p.name).exists(): image_data = str(Path("data/covers") / p.name)
+            elif p.name.startswith("covers/"): # Si ya viene con el prefijo
+                image_data = f"data/{paper['cover_path']}" if not paper['cover_path'].startswith("/") else paper['cover_path'][1:]
+        
+        # 2. Intentar thumbnail de IA
+        if image_data.startswith("http") and img_path:
             p = Path(img_path)
             if p.exists(): image_data = str(p)
             elif (Path("data/thumbnails") / p.name).exists(): image_data = str(Path("data/thumbnails") / p.name)
@@ -207,11 +243,37 @@ def render_card(paper, key_prefix="card"):
         st.image(image_data, use_container_width=True)
             
         st.markdown(f"**{title[:50]}...**")
-        st.caption(f"⭐ {int(score*10)}% | {year}")
-        if st.button("Ver", key=f"{key_prefix}_{paper['id']}", use_container_width=True):
-             st.session_state.selected_paper_id = paper['id']
-             st.session_state.current_view = "detail"
-             st.rerun()
+        q_val = int(score*10) if score <= 10 else int(score) # Manejar 0.8 vs 8.5
+        st.caption(f"⭐ {q_val}% Match | {year}")
+        
+        c1, c2 = st.columns([2, 1])
+        with c1:
+            if st.button("Ver", key=f"{key_prefix}_{paper['id']}", use_container_width=True):
+                st.session_state.selected_paper_id = paper['id']
+                st.session_state.current_view = "detail"
+                st.rerun()
+        with c2:
+            # Popover para Modo Guardia (⚡ Vista Rápida)
+            with st.popover("⚡", use_container_width=True):
+                st.markdown(f"**{title}**")
+                
+                # Intentar obtener clinical_insights si están disponibles
+                # En list_papers, to_card_dict NO incluye clinical_insights por performance
+                # Pero to_dict sí. Si no está, avisamos.
+                insights = paper.get("clinical_insights")
+                if insights and insights.get("bottom_line"):
+                    st.success(f"**Bottom Line:** {insights['bottom_line']}")
+                    if insights.get("key_dosages"):
+                        st.info(f"💊 **Dosis:** {', '.join(insights['key_dosages'])}")
+                    if insights.get("safety_warnings"):
+                        st.warning(f"⚠️ **Seguridad:** {', '.join(insights['safety_warnings'])}")
+                    
+                    if insights.get("suggested_calculators"):
+                        st.info(f"🧮 **Calculadoras:** {', '.join(insights['suggested_calculators'][:3])}")
+                        
+                    st.caption(f"🛡️ {insights.get('safety_disclaimer', '')}")
+                else:
+                    st.info("Insights no disponibles en vista previa. Abre el paper para generarlos.")
 
 # --- VISTAS ---
 
@@ -232,26 +294,119 @@ if st.session_state.current_view == "detail" and st.session_state.selected_paper
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("⭐ Calidad", f"{paper.get('score_calidad', 0)}/10")
         
-        doi = paper.get("doi")
-        if doi:
-            m2.markdown(f"**DOI**\n\n[{doi}](https://doi.org/{doi})")
-        else:
-            m2.metric("DOI", "N/A")
-            
-        m3.markdown(f"**Muestra:** {paper.get('n_muestra', 'N/A')}\n\n**NNT:** {paper.get('nnt', 'N/A')}")
+        is_libro = paper.get("categoria") == "libros"
         
-        revista = paper.get('revista') or "N/A"
-        fecha = paper.get('fecha_publicacion_exacta') or paper.get('año')
-        m4.markdown(f"**Revista:** {revista}\n\n**Fecha:** {fecha}\n\n**Tipo:** {paper.get('tipo_estudio')}")
+        if is_libro:
+            # Info para LIBROS
+            isbn = paper.get("isbn") or "N/A"
+            m2.markdown(f"**ISBN**\n\n{isbn}")
+            
+            pags = paper.get("num_paginas") or "N/A"
+            idioma = paper.get("idioma") or "Sin definir"
+            m3.markdown(f"**Páginas:** {pags}\n\n**Idioma:** {idioma}")
+            
+            editorial = paper.get("editorial") or "N/A"
+            edicion = paper.get("edicion") or "N/A"
+            m4.markdown(f"**Editorial:** {editorial}\n\n**Edición:** {edicion}")
+        else:
+            # Info para PAPERS
+            doi = paper.get("doi")
+            if doi:
+                m2.markdown(f"**DOI**\n\n[{doi}](https://doi.org/{doi})")
+            else:
+                m2.metric("DOI", "N/A")
+                
+            m3.markdown(f"**Muestra:** {paper.get('n_muestra', 'N/A')}\n\n**NNT:** {paper.get('nnt', 'N/A')}")
+            
+            revista = paper.get('revista') or "N/A"
+            fecha = paper.get('fecha_publicacion_exacta') or paper.get('año')
+            m4.markdown(f"**Revista:** {revista}\n\n**Fecha:** {fecha}\n\n**Tipo:** {paper.get('tipo_estudio')}")
+        
+        # Botones de Acción Rápidos
+        cols_act = st.columns([1,1,1,3])
+        with cols_act[0]:
+            if st.button("📑 Citar", use_container_width=True):
+                st.session_state.show_citation = True
+        
+        if st.session_state.get("show_citation"):
+            with st.expander("📝 Generar Cita", expanded=True):
+                c_style = st.selectbox("Estilo", ["vancouver", "apa", "harvard"])
+                try:
+                    res_cite = requests.get(f"{API_URL}/papers/citar/{paper['id']}", params={"style": c_style})
+                    if res_cite.status_code == 200:
+                        st.code(res_cite.json()["cita"])
+                    else:
+                        st.error("No se pudo generar la cita")
+                except:
+                    st.error("Error conectando con el servicio de citas")
+                if st.button("Cerrar"):
+                    st.session_state.show_citation = False
+                    st.rerun()
+
+        # ⚡ SECCIÓN MODO GUARDIA (UCI/ER)
+        insights = paper.get("clinical_insights")
+        if insights and insights.get("bottom_line"):
+            with st.container(border=True):
+                st.markdown("### ⚡ Modo Guardia: Quick Insights")
+                c_i1, c_i2, c_i3 = st.columns([3, 2, 1])
+                with c_i1:
+                    st.success(f"**Conclusión Directa:**\n\n{insights['bottom_line']}")
+                with c_i2:
+                    if insights.get("key_dosages"):
+                        st.info(f"💊 **Dosis Sugeridas:**\n\n- " + "\n- ".join(insights['key_dosages']))
+                    if insights.get("safety_warnings"):
+                        st.warning(f"⚠️ **Advertencias:**\n\n- " + "\n- ".join(insights['safety_warnings']))
+                with c_i3:
+                    st.metric("🎓 Evidencia", insights.get('grade', 'N/A'))
+                    st.caption(f"*{insights.get('safety_disclaimer', '')}*")
+                    if st.button("🔄 Regenerar", key=f"re_ins_{paper['id']}"):
+                        with st.spinner("Analizando dosis..."):
+                            requests.post(f"{API_URL}/papers/{paper['id']}/clinical-insights")
+                            st.rerun()
+            
+            # --- RECOMENDACIONES GPC (Fase 2) ---
+            gpc_rec = insights.get("gpc_recommendations")
+            if gpc_rec:
+                with st.expander("📜 Guía de Práctica Clínica - Recomendaciones", expanded=True):
+                    c_g1, c_g2 = st.columns(2)
+                    with c_g1:
+                        if gpc_rec.get("clase_i"):
+                            st.success("**Clase I (Fuerte)**\n\n- " + "\n- ".join(gpc_rec["clase_i"]))
+                        if gpc_rec.get("clase_iia"):
+                            st.info("**Clase IIa (Sugerida)**\n\n- " + "\n- ".join(gpc_rec["clase_iia"]))
+                    with c_g2:
+                        if gpc_rec.get("contraindicaciones_iii"):
+                            st.error("**Clase III (No realizar)**\n\n- " + "\n- ".join(gpc_rec["contraindicaciones_iii"]))
+                        if gpc_rec.get("puntos_clave"):
+                            st.warning("**Puntos Clave**\n\n- " + "\n- ".join(gpc_rec["puntos_clave"]))
+
+            # --- CALCULADORAS SUGERIDAS (Fase 2) ---
+            calc_sug = insights.get("suggested_calculators")
+            if calc_sug:
+                st.markdown("🔍 **Calculadoras Sugeridas:** " + ", ".join([f"`{c}`" for c in calc_sug]))
+                if st.button("🧮 Abrir Panel de Calculadoras", key=f"open_calc_{paper['id']}"):
+                    st.session_state.current_view = "calculadoras"
+                    st.rerun()
+        else:
+            if not is_libro: # Solo para papers por ahora
+                with st.container(border=True):
+                    st.info("⚡ El **Modo Guardia** no está activo para este documento.")
+                    if st.button("🚀 Generar Insights (Dosis y Seguridad)", key=f"gen_ins_{paper['id']}", type="primary"):
+                        with st.spinner("IA analizando soporte vital..."):
+                            requests.post(f"{API_URL}/papers/{paper['id']}/clinical-insights")
+                            st.rerun()
+
         st.markdown("---")
 
         # Tabs
-        tab1, tab2, tab3 = st.tabs(["📄 Análisis & PDF", "💬 Chat con Paper", "✏️ Metadatos"])
+        title_tab1 = "📄 Descripción & PDF" if is_libro else "📄 Análisis & PDF"
+        tab1, tab2, tab3 = st.tabs([title_tab1, "💬 Chat con IA", "✏️ Metadatos"])
         
         with tab1:
             col_info, col_pdf = st.columns([1, 1])
             with col_info:
-                st.markdown("### Review Epistemológico")
+                header_analisis = "### 📚 Descripción y Análisis" if is_libro else "### Review Epistemológico"
+                st.markdown(header_analisis)
                 st.write(paper.get("analisis_completo", "Pendiente..."))
             
             with col_pdf:
@@ -294,7 +449,7 @@ if st.session_state.current_view == "detail" and st.session_state.selected_paper
                     st.markdown(f'<iframe src="{pdf_url}" width="100%" height="600px"></iframe>', unsafe_allow_html=True)
         
         with tab2:
-            st.markdown("### 💬 Pregúntale a este Paper")
+            st.markdown(f"### 💬 Pregúntale a este {'Libro' if is_libro else 'Paper'}")
             k_chat = f"chat_{paper['id']}"
             if k_chat not in st.session_state:
                 st.session_state[k_chat] = []
@@ -303,7 +458,7 @@ if st.session_state.current_view == "detail" and st.session_state.selected_paper
                 with st.chat_message(msg["role"]):
                     st.write(msg["content"])
             
-            prompt = st.chat_input("Escribe tu pregunta sobre el estudio...")
+            prompt = st.chat_input(f"Escribe tu pregunta sobre este {'libro' if is_libro else 'estudio'}...")
             if prompt:
                 st.session_state[k_chat].append({"role": "user", "content": prompt})
                 with st.chat_message("user"):
@@ -331,11 +486,21 @@ if st.session_state.current_view == "detail" and st.session_state.selected_paper
                 new_autores = st.text_area("Autores (uno por línea)", 
                     value="\n".join(paper.get("autores", [])) if paper.get("autores") else "")
                 new_year = st.number_input("Año", value=paper.get("año") or 2024, min_value=1900, max_value=2030)
+                # Obtener especialidades dinámicas
+                try:
+                    especialidades_db = requests.get(f"{API_URL}/papers/especialidades").json()
+                except:
+                    especialidades_db = ["Cardiología", "UCI", "Infectología", "Neurología", "Neumonía", "ECG"]
+                
+                if "Otra" not in especialidades_db: especialidades_db.append("Otra")
+                
+                current_spec = paper.get("especialidad") or "Otra"
+                if current_spec not in especialidades_db:
+                    especialidades_db.insert(0, current_spec)
+                
                 new_specialty = st.selectbox("Especialidad", 
-                    ["Cardiología", "UCI", "Infectología", "Neurología", "Neumonía", "ECG", "Otra"],
-                    index=0 if not paper.get("especialidad") else 
-                        (["Cardiología", "UCI", "Infectología", "Neurología", "Neumonía", "ECG", "Otra"].index(paper.get("especialidad")) 
-                         if paper.get("especialidad") in ["Cardiología", "UCI", "Infectología", "Neurología", "Neumonía", "ECG", "Otra"] else 6)
+                    especialidades_db,
+                    index=especialidades_db.index(current_spec)
                 )
                 new_tipo = st.selectbox("Tipo de Estudio",
                     ["RCT", "Systematic Review", "Meta-análisis", "Cohorte", "Caso-Control", "Observacional", "Otro"],
@@ -420,6 +585,40 @@ if st.session_state.current_view == "detail" and st.session_state.selected_paper
                     with st.expander("💰 Financiadores"):
                         for funder in paper.get("funders", []):
                             st.caption(f"• {funder.get('nombre', 'Desconocido')}")
+
+                # --- NUEVA SECCIÓN METADATOS LIBRO ---
+                if paper.get("categoria") == "libros":
+                    st.markdown("---")
+                    st.markdown("#### 📚 Enriquecer Libro")
+                    
+                    st.info(f"""
+                    **ISBN:** {paper.get('isbn') or 'No disponible'}  
+                    **Editorial:** {paper.get('editorial') or 'N/A'}  
+                    **Edición:** {paper.get('edicion') or 'N/A'}
+                    """)
+                    
+                    search_isbn = st.text_input("ISBN para buscar", 
+                        value=paper.get("isbn", ""), 
+                        placeholder="978...",
+                        help="Deje vacío para intentar detectar automáticamente del título")
+                    
+                    if st.button("🔍 Buscar Metadatos Online", use_container_width=True, type="primary"):
+                        with st.spinner("Buscando en OpenLibrary y Google Books..."):
+                            try:
+                                payload = {"isbn": search_isbn} if search_isbn else {}
+                                res = requests.put(
+                                    f"{API_URL}/papers/{paper['id']}/enrich-book",
+                                    json=payload,
+                                    timeout=30
+                                )
+                                if res.status_code == 200:
+                                    st.success("✅ ¡Libro enriquecido!")
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Error: {res.json().get('detail', 'Ocurrió un error')}")
+                            except Exception as e:
+                                st.error(f"❌ Error: {e}")
 
 
     else:
@@ -542,8 +741,226 @@ elif st.session_state.current_view == "ekg_dojo":
             else:
                 st.markdown("👈 Selecciona un caso para empezar el desafío.")
 
+# 2.6 VIEW PAPERS (Categoría: papers con DOI)
+elif st.session_state.current_view == "categoria_papers":
+    st.markdown("## 📄 Papers Científicos")
+    st.markdown("Estudios con DOI validado y metadatos enriquecidos.")
+    
+    try:
+        res = requests.get(f"{API_URL}/papers", params={"categoria": "papers", "limit": 50})
+        papers_list = res.json() if res.status_code == 200 else []
+    except:
+        papers_list = []
+    
+    if not papers_list:
+        st.info("No hay papers en esta categoría. Los estudios con DOI aparecerán aquí.")
+    else:
+        for i in range(0, len(papers_list), 4):
+            cols = st.columns(4)
+            for j in range(4):
+                if i + j < len(papers_list):
+                    with cols[j]:
+                        render_card(papers_list[i+j], f"papers_{i}")
+
+# 2.7 VIEW LIBROS (Categoría: libros por especialidad)
+elif st.session_state.current_view == "categoria_libros":
+    st.markdown("## 📚 Libros de Medicina")
+    st.markdown("Libros y manuales organizados por especialidad.")
+    
+    try:
+        res = requests.get(f"{API_URL}/papers", params={"categoria": "libros", "limit": 50})
+        libros = res.json() if res.status_code == 200 else []
+    except:
+        libros = []
+    
+    if not libros:
+        st.info("No hay libros en esta categoría. Los documentos con más de 200 páginas se catalogarán aquí.")
+    else:
+        by_specialty = {}
+        for libro in libros:
+            spec = libro.get("especialidad") or "General"
+            if spec not in by_specialty:
+                by_specialty[spec] = []
+            by_specialty[spec].append(libro)
+        
+        for specialty, books in by_specialty.items():
+            st.markdown(f"### {specialty}")
+            cols = st.columns(4)
+            for i, book in enumerate(books[:8]):
+                with cols[i % 4]:
+                    render_card(book, f"libro_{specialty}")
+
+# 2.8.5 VIEW CATEGORIA GUIAS (Fase 2)
+elif st.session_state.current_view == "categoria_guias":
+    st.markdown("## 📜 Guías de Práctica Clínica (GPC)")
+    st.markdown("Recomendaciones oficiales y consensos internacionales.")
+    
+    try:
+        # Buscamos papers que tengan 'guía' o similar en el tipo o título
+        res = requests.get(f"{API_URL}/papers", params={"limit": 50})
+        all_p = res.json() if res.status_code == 200 else []
+        # Filtrado simple en frontend por ahora (o podríamos añadir un filtro al endpoint)
+        guias = [p for p in all_p if any(kw in (p.get('titulo') or "").lower() for kw in ["guía", "guia", "guideline"])]
+    except:
+        guias = []
+    
+    if not guias:
+        st.info("No se han identificado Guías de Práctica Clínica todavía.")
+    else:
+        for i in range(0, len(guias), 4):
+            cols = st.columns(4)
+            for j in range(4):
+                if i + j < len(guias):
+                    with cols[j]:
+                        render_card(guias[i+j], f"gpc_{i}")
+
+# 2.8.6 VIEW CALCULADORAS (Fase 2)
+elif st.session_state.current_view == "calculadoras":
+    st.markdown("## 🧮 Calculadoras Clínicas")
+    st.markdown("Herramientas de cálculo rápido para soporte vital.")
+    
+    c_tab1, c_tab2, c_tab3 = st.tabs(["SOFA Score", "qSOFA", "Wells (TEP)"])
+    
+    with c_tab1:
+        st.subheader("Sequential Organ Failure Assessment (SOFA)")
+        col1, col2 = st.columns(2)
+        with col1:
+            resp = st.selectbox("Respiración (PaO2/FiO2)", [">400", "<400", "<300", "<200 (con soporte)", "<100 (con soporte)"], index=0)
+            plat = st.selectbox("Coagulación (Plaquetas x10³/mm³)", [">150", "<150", "<100", "<50", "<20"], index=0)
+            liver = st.selectbox("Hígado (Bilirrubina mg/dL)", ["<1.2", "1.2-1.9", "2.0-5.9", "6.0-11.9", ">12.0"], index=0)
+        with col2:
+            cv = st.selectbox("Cardiovascular (PAM / Vasopresores)", ["PAM >= 70 mmHg", "PAM < 70 mmHg", "Dopa < 5 o Dobuta", "Dopa 6-15 o Nor/Adr <= 0.1", "Dopa > 15 o Nor/Adr > 0.1"], index=0)
+            gcs = st.slider("SNC (Glasgow Coma Scale)", 3, 15, 15)
+            renal = st.selectbox("Renal (Creatinina o Gasto Urinario)", ["<1.2", "1.2-1.9", "2.0-3.4", "3.5-4.9 o <500ml/d", ">5.0 o <200ml/d"], index=0)
+        
+        # Lógica de cálculo simplificada para demo
+        score_val = 0
+        if st.button("Calcular SOFA"):
+            # En una implementación real sumaríamos los puntos de cada selectbox
+            st.metric("SOFA Score", "Calculando...", delta="Demo")
+            st.warning("Implementación completa de lógica aritmética pendiente.")
+
+    with c_tab2:
+        st.subheader("quick SOFA (qSOFA)")
+        r1 = st.checkbox("Frecuencia Respiratoria >= 22/min")
+        r2 = st.checkbox("Alteración del estado mental (GCS < 15)")
+        r3 = st.checkbox("Presión Arterial Sistólica <= 100 mmHg")
+        qscore = sum([r1, r2, r3])
+        st.metric("qSOFA Score", qscore)
+        if qscore >= 2:
+            st.error("⚠️ Riesgo elevado de mortalidad o estancia prolongada en UCI.")
+        else:
+            st.success("Bajo riesgo.")
+
+    with c_tab3:
+        st.subheader("Criterios de Wells para TEP")
+        # Simulación de lista de criterios
+        st.info("Calculadora de Wells en desarrollo...")
+
+# 2.8 VIEW SIN CATEGORIZAR (con sub-sección Eliminados)
+elif st.session_state.current_view == "sin_categorizar":
+    st.markdown("## ❓ Sin Categorizar")
+    st.markdown("Documentos pendientes de clasificar.")
+    
+    tab_sin_cat, tab_deleted = st.tabs(["📋 Pendientes", "🗑️ Eliminados"])
+    
+    with tab_sin_cat:
+        try:
+            res = requests.get(f"{API_URL}/papers", params={"categoria": "sin_categorizar", "limit": 50})
+            sin_cat = res.json() if res.status_code == 200 else []
+        except:
+            sin_cat = []
+        
+        if not sin_cat:
+            st.success("✅ No hay documentos sin categorizar.")
+        else:
+            st.warning(f"Hay {len(sin_cat)} documentos pendientes de clasificar.")
+            for paper in sin_cat:
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([3, 2, 1])
+                    with c1:
+                        st.markdown(f"**{paper.get('titulo', 'Sin título')[:100]}**")
+                        if paper.get("abstract"):
+                            st.caption(f"{paper['abstract'][:150]}...")
+                        elif paper.get("descripcion_libro"):
+                            st.caption(f"{paper['descripcion_libro'][:150]}...")
+                        st.caption(f"📅 Recibido: {paper.get('fecha_subida', 'Unknown')[:10]} | 📑 Páginas: {paper.get('num_paginas', 'N/A')}")
+                    with c2:
+                        # Mover con botón destacado
+                        opts = ["papers", "libros", "ekg_dojo", "sin_categorizar"]
+                        curr_idx = opts.index(paper.get("categoria", "sin_categorizar"))
+                        nueva_cat = st.selectbox("Clasificar como:", opts, index=curr_idx, key=f"cat_sel_{paper['id']}")
+                        if st.button("🚀 Asignar", key=f"move_{paper['id']}", use_container_width=True):
+                            requests.put(f"{API_URL}/papers/{paper['id']}/categoria", json={"categoria": nueva_cat})
+                            st.success(f"Movido a {nueva_cat}")
+                            time.sleep(0.5)
+                            st.rerun()
+                    with c3:
+                        if st.button("🔍 Ver", key=f"view_sc_{paper['id']}", use_container_width=True):
+                            st.session_state.selected_paper_id = paper['id']
+                            st.session_state.current_view = "detail"
+                            st.rerun()
+                        if st.button("🗑️", key=f"del_{paper['id']}", use_container_width=True):
+                            requests.delete(f"{API_URL}/papers/{paper['id']}")
+                            st.rerun()
+    
+    with tab_deleted:
+        try:
+            res = requests.get(f"{API_URL}/papers/deleted", params={"limit": 50})
+            deleted = res.json() if res.status_code == 200 else []
+        except:
+            deleted = []
+        
+        if not deleted:
+            st.info("No hay documentos eliminados.")
+        else:
+            st.markdown(f"**{len(deleted)}** eliminados (no se volverán a descargar)")
+            for paper in deleted:
+                with st.container(border=True):
+                    c1, c2 = st.columns([4, 2])
+                    with c1:
+                        st.markdown(f"**{paper.get('titulo', 'Sin título')[:50]}...**")
+                    with c2:
+                        if st.button("🔄 Restaurar", key=f"rest_{paper['id']}"):
+                            requests.put(f"{API_URL}/papers/{paper['id']}/restore")
+                            st.rerun()
+                        if st.button("⛔ Borrar", key=f"perm_{paper['id']}"):
+                            requests.delete(f"{API_URL}/papers/{paper['id']}/permanent")
+                            st.rerun()
+
+# 2.9 VIEW SEARCH RESULTS
+elif st.session_state.current_view == "search_results":
+    q = st.session_state.get("search_q", "")
+    st.markdown(f"## 🔍 Resultados para: *{q}*")
+    
+    try:
+        res = requests.get(f"{API_URL}/papers/search", params={"q": q, "limit": 20})
+        results = res.json() if res.status_code == 200 else []
+    except:
+        results = []
+    
+    if not results:
+        st.info("No se encontraron documentos exactos. Probando búsqueda semántica (IA)...")
+        # Fallback a RAG
+        try:
+            res_rag = requests.get(f"{API_URL}/papers/query", params={"q": q})
+            results = res_rag.json() if res_rag.status_code == 200 else []
+        except:
+            results = []
+            
+    if not results:
+        st.warning("No se encontraron resultados ni siquiera con IA.")
+    else:
+        for i in range(0, len(results), 4):
+            cols = st.columns(4)
+            for j in range(4):
+                if i + j < len(results):
+                    with cols[j]:
+                        render_card(results[i+j], f"search_{i}")
+
 # 3. VIEW BROWSE (Grid + Paginación)
 elif st.session_state.current_view == "browse":
+
     filt = st.session_state.browse_filter
     st.title(f"Explorando: {filt.get('specialty', 'Todos')} ({filt.get('sort', 'Reciente')})")
     
@@ -583,20 +1000,27 @@ elif st.session_state.current_view == "channels":
     # 1. Añadir Canal
     with st.expander("➕ Añadir Nuevo Canal", expanded=False):
         c1, c2, c3 = st.columns([3, 2, 1])
-        new_channel = c1.text_input("Username del Canal (ej: @librosmedicina)")
-        new_name = c2.text_input("Nombre Descriptivo (Opcional)")
-        if c3.button("Añadir", type="primary", use_container_width=True):
+        new_channel = c1.text_input("Username del Canal (ej: @librosmedicina)", key="new_channel_input")
+        new_name = c2.text_input("Nombre Descriptivo (Opcional)", key="new_name_input")
+        if c3.button("Añadir", type="primary", use_container_width=True, key="add_channel_btn"):
             if new_channel:
+                if not new_channel.startswith("@"):
+                    new_channel = "@" + new_channel
                 try:
-                    res = requests.post(f"{API_URL}/channels", params={"username": new_channel, "nombre": new_name})
+                    res = requests.post(f"{API_URL}/channels", params={"username": new_channel, "nombre": new_name}, timeout=10)
                     if res.status_code == 200:
-                        st.success(f"Canal {new_channel} añadido correctamente")
+                        st.success(f"✅ Canal {new_channel} añadido correctamente")
                         time.sleep(1)
                         st.rerun()
                     else:
                         st.error(f"Error: {res.text}")
+                except requests.exceptions.Timeout:
+                    st.error("⏱️ Timeout - La API está ocupada. Intenta de nuevo.")
                 except Exception as e:
                     st.error(f"Error de conexión: {e}")
+            else:
+                st.warning("⚠️ Ingresa el username del canal")
+
     
     # 2. Lista de Canales
     st.markdown("### Canales Monitoreados")
